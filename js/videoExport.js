@@ -115,6 +115,13 @@ export async function convertWebmToMp4(webmBlob, onProgress) {
   if (!window.FFmpeg) {
     throw new Error('ffmpeg.wasm が読み込まれていません。');
   }
+  if (!window.crossOriginIsolated) {
+    throw new Error(
+      'このページはMP4変換に必要な「クロスオリジン分離」が有効になっていません。' +
+      'ホスティング先のHTTPヘッダー設定（Cross-Origin-Opener-Policy / Cross-Origin-Embedder-Policy）をご確認ください。' +
+      '（WebM形式であればこの制約なくダウンロードできます）'
+    );
+  }
   const { createFFmpeg, fetchFile } = window.FFmpeg;
 
   if (!ffmpegInstance) {
