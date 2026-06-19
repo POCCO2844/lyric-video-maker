@@ -9,6 +9,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
   const [pxPerSec, setPxPerSec] = useState(60);
   const scrollRef = useRef(null);
   const dragState = useRef(null);
+  const justDraggedRef = useRef(false);
 
   const totalWidth = Math.max(duration * pxPerSec + 200, 800);
 
@@ -43,7 +44,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
     const startX = e.clientX;
     const origStart = line.start;
     const origEnd = line.end;
-    dragState.current = { mode, id: line.id, startX, origStart, origEnd };
+    dragState.current = { mode, id: line.id, startX, origStart, origEnd, moved: false };
     window.addEventListener('mousemove', onDragMove);
     window.addEventListener('mouseup', onDragUp);
   }
@@ -52,6 +53,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
     const ds = dragState.current;
     if (!ds) return;
     const dx = e.clientX - ds.startX;
+    if (Math.abs(dx) > 2) ds.moved = true;
     const dt = dx / pxPerSec;
     if (ds.mode === 'move') {
       const len = ds.origEnd - ds.origStart;
@@ -67,6 +69,12 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
   }
 
   function onDragUp() {
+    // ドラッグ直後に発火する親要素の click イベントで選択解除されないよう、
+    // 1フレーム分だけ「ドラッグ直後フラグ」を立てておく
+    if (dragState.current) {
+      justDraggedRef.current = true;
+      setTimeout(() => { justDraggedRef.current = false; }, 0);
+    }
     dragState.current = null;
     window.removeEventListener('mousemove', onDragMove);
     window.removeEventListener('mouseup', onDragUp);
@@ -128,7 +136,13 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
           <div
             className="timeline-lines"
             style={{ height: rows.laneCount * ROW_H, width: totalWidth }}
-            onClick={() => setSelectedLineId(null)}
+            onClick={(e) => {
+              // 背景（行・レーン自体）がクリックされた場合のみ選択解除する。
+              // 歌詞ブロックやそのハンドルがクリックされた場合は currentTarget 自身ではないので除外。
+              if (e.target === e.currentTarget) {
+                setSelectedLineId(null);
+              }
+            }}
           >
             {Array.from({ length: rows.laneCount }).map((_, i) => (
               <div key={i} className="timeline-row" />
@@ -143,6 +157,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
                   top: line.lane * ROW_H + 4,
                 }}
                 onMouseDown={(e) => onBlockMouseDown(e, line, 'move')}
+                onClick={(e) => e.stopPropagation()}
                 title={line.text}
               >
                 <div className="handle l" onMouseDown={(e) => onBlockMouseDown(e, line, 'l')} />
