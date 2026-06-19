@@ -136,7 +136,13 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
           <div
             className="timeline-lines"
             style={{ height: rows.laneCount * ROW_H, width: totalWidth }}
-            onClick={() => { if (!justDraggedRef.current) setSelectedLineId(null); }}
+            onClick={(e) => {
+              // 背景（行・レーン自体）がクリックされた場合のみ選択解除する。
+              // 歌詞ブロックやそのハンドルがクリックされた場合は currentTarget 自身ではないので除外。
+              if (e.target === e.currentTarget) {
+                setSelectedLineId(null);
+              }
+            }}
           >
             {Array.from({ length: rows.laneCount }).map((_, i) => (
               <div key={i} className="timeline-row" />
