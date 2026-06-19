@@ -54,7 +54,7 @@ async function loadModule(path) {
   const source = await res.text();
 
   const transformed = Babel.transform(source, {
-    presets: ['react'],
+    presets: [['react', { runtime: 'classic' }]],
     plugins: ['transform-modules-commonjs'],
     filename: path,
     sourceType: 'module',
