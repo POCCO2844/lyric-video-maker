@@ -40,6 +40,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
 
   function onBlockMouseDown(e, line, mode) {
     e.stopPropagation();
+    console.log('[DEBUG] onBlockMouseDown', line.id, mode);
     setSelectedLineId(line.id);
     const startX = e.clientX;
     const origStart = line.start;
@@ -139,6 +140,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
             onClick={(e) => {
               // 背景（行・レーン自体）がクリックされた場合のみ選択解除する。
               // 歌詞ブロックやそのハンドルがクリックされた場合は currentTarget 自身ではないので除外。
+              console.log('[DEBUG] timeline-lines onClick. target===currentTarget?', e.target === e.currentTarget, e.target.className);
               if (e.target === e.currentTarget) {
                 setSelectedLineId(null);
               }
