@@ -1,5 +1,5 @@
 // components/ExportModal.js
-const { useState } = React;
+const { useState, useEffect } = React;
 import { recordWebM, convertWebmToMp4, downloadBlob } from '../videoExport.js';
 
 export function ExportModal({ project, audioBuffer, onClose }) {
@@ -7,11 +7,23 @@ export function ExportModal({ project, audioBuffer, onClose }) {
   const [progress, setProgress] = useState(0);
   const [format, setFormat] = useState('mp4');
   const [errorMsg, setErrorMsg] = useState('');
+  const [statusText, setStatusText] = useState('');
+  const [elapsedSec, setElapsedSec] = useState(0);
+
+  // 変換中、経過秒数を1秒ごとに数える（進捗%が動かなくても「固まっていない」ことが分かるように）
+  useEffect(() => {
+    if (stage !== 'recording' && stage !== 'converting') return;
+    const start = Date.now();
+    setElapsedSec(0);
+    const timer = setInterval(() => setElapsedSec(Math.floor((Date.now() - start) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [stage]);
 
   async function startExport() {
     setStage('recording');
     setProgress(0);
     setErrorMsg('');
+    setStatusText('');
     try {
       const { webmBlob } = await recordWebM(project, audioBuffer, (ratio) => {
         setProgress(ratio);
@@ -25,7 +37,11 @@ export function ExportModal({ project, audioBuffer, onClose }) {
 
       setStage('converting');
       setProgress(0);
-      const mp4Blob = await convertWebmToMp4(webmBlob, (ratio) => setProgress(ratio));
+      const mp4Blob = await convertWebmToMp4(
+        webmBlob,
+        (ratio) => setProgress(ratio),
+        (text) => setStatusText(text)
+      );
       downloadBlob(mp4Blob, `${project.name || 'lyric-video'}.mp4`);
       setStage('done');
     } catch (e) {
@@ -78,7 +94,14 @@ export function ExportModal({ project, audioBuffer, onClose }) {
           <>
             <div className="stage">{stageLabel}</div>
             <div className="progress-bar"><div className="fill" style={{ width: `${Math.round(progress * 100)}%` }} /></div>
-            <div className="stage">{Math.round(progress * 100)}%</div>
+            <div className="stage">
+              {Math.round(progress * 100)}%　経過時間: {elapsedSec}秒
+            </div>
+            {stage === 'converting' && (
+              <div className="stage" style={{ fontFamily: 'var(--mono)', fontSize: 10.5, opacity: 0.7, marginTop: 4, wordBreak: 'break-all' }}>
+                {statusText || '処理を準備しています…'}
+              </div>
+            )}
           </>
         )}
 

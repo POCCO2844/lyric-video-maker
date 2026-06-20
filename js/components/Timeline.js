@@ -81,9 +81,11 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
   }
 
   function onRulerClick(e) {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const scrollLeft = scrollRef.current?.scrollLeft || 0;
-    const x = e.clientX - rect.left + scrollLeft;
+    // スクロールコンテナ自体を基準に計算する（sticky要素のgetBoundingClientRectに依存しない）。
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const containerRect = scrollEl.getBoundingClientRect();
+    const x = (e.clientX - containerRect.left) + scrollEl.scrollLeft;
     setIsPlaying(false);
     setCurrentTime(xToTime(x));
   }

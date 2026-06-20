@@ -117,7 +117,7 @@ export async function recordWebM(project, audioBuffer, onProgress) {
  */
 let ffmpegInstance = null;
 
-export async function convertWebmToMp4(webmBlob, onProgress) {
+export async function convertWebmToMp4(webmBlob, onProgress, onStatusText) {
   if (!window.FFmpeg) {
     throw new Error('ffmpeg.wasm が読み込まれていません。');
   }
@@ -132,29 +132,64 @@ export async function convertWebmToMp4(webmBlob, onProgress) {
 
   if (!ffmpegInstance) {
     ffmpegInstance = createFFmpeg({
-      log: false,
+      log: true, // コンソールにffmpegの内部ログを出す（フリーズ時の原因切り分け用）
       corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js',
     });
   }
+
+  // ffmpegの内部ログを受け取るたびに「生きている」ことを伝える（進捗%が出ない環境向けのフォールバック表示）
+  let lastLogAt = Date.now();
+  ffmpegInstance.setLogger(({ message }) => {
+    lastLogAt = Date.now();
+    if (onStatusText) onStatusText(message);
+  });
+
   if (!ffmpegInstance.isLoaded()) {
+    if (onStatusText) onStatusText('ffmpeg.wasm 本体を読み込んでいます…');
     await ffmpegInstance.load();
   }
 
   ffmpegInstance.setProgress(({ ratio }) => {
+    lastLogAt = Date.now();
     if (onProgress && ratio >= 0) onProgress(Math.min(ratio, 1));
   });
 
   ffmpegInstance.FS('writeFile', 'input.webm', await fetchFile(webmBlob));
-  await ffmpegInstance.run(
-    '-i', 'input.webm',
-    '-c:v', 'libx264',
-    '-preset', 'fast',
-    '-crf', '20',
-    '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac',
-    '-b:a', '192k',
-    'output.mp4'
-  );
+
+  // 一定時間（60秒）まったくログ・進捗の更新が無い場合はフリーズとみなしてエラーにする。
+  // ffmpeg.run() 自体は完了までawaitし続けるしかないため、Promise.raceで監視する。
+  const STALL_TIMEOUT_MS = 60_000;
+  let stallTimer = null;
+  const stallWatcher = new Promise((_, reject) => {
+    stallTimer = setInterval(() => {
+      if (Date.now() - lastLogAt > STALL_TIMEOUT_MS) {
+        clearInterval(stallTimer);
+        reject(new Error(
+          `MP4変換が${Math.round(STALL_TIMEOUT_MS / 1000)}秒以上応答していません。` +
+          'ブラウザのメモリ不足、またはffmpeg.wasmの読み込み失敗の可能性があります。' +
+          '解像度を下げる、曲を短くする、またはWebM形式での書き出しをお試しください。'
+        ));
+      }
+    }, 2000);
+  });
+
+  try {
+    await Promise.race([
+      ffmpegInstance.run(
+        '-i', 'input.webm',
+        '-c:v', 'libx264',
+        '-preset', 'fast',
+        '-crf', '20',
+        '-pix_fmt', 'yuv420p',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        'output.mp4'
+      ),
+      stallWatcher,
+    ]);
+  } finally {
+    clearInterval(stallTimer);
+  }
   const data = ffmpegInstance.FS('readFile', 'output.mp4');
   ffmpegInstance.FS('unlink', 'input.webm');
   ffmpegInstance.FS('unlink', 'output.mp4');
