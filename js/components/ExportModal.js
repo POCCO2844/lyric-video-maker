@@ -40,7 +40,8 @@ export function ExportModal({ project, audioBuffer, onClose }) {
       const mp4Blob = await convertWebmToMp4(
         webmBlob,
         (ratio) => setProgress(ratio),
-        (text) => setStatusText(text)
+        (text) => setStatusText(text),
+        project.settings.fps || 30
       );
       downloadBlob(mp4Blob, `${project.name || 'lyric-video'}.mp4`);
       setStage('done');

@@ -86,6 +86,7 @@ export async function recordWebM(project, audioBuffer, onProgress) {
   const hasBgVideo = settings.bgType === 'video' && !!settings.bgVideoBlob;
   const frameIntervalMs = 1000 / fps;
   let nextFrameAt = 0; // totalDuration基準での次フレーム送出タイミング（秒）
+  let requestFrameCallCount = 0; // 診断用：実際に何回フレームを送出したか
 
   // 描画ループ：実時間に合わせて再描画しつつ、指定fps間隔でのみフレームをエンコーダに送出する。
   // 背景動画がある場合は、フレームごとに動画のシーク完了を待ってから描画する（コマ落ち防止のため）。
@@ -103,6 +104,7 @@ export async function recordWebM(project, audioBuffer, onProgress) {
         renderer.renderFrame(t);
         if (supportsManualFrame) {
           videoTrack.requestFrame();
+          requestFrameCallCount++;
         }
         nextFrameAt += frameIntervalMs / 1000;
         if (nextFrameAt < t) nextFrameAt = t + frameIntervalMs / 1000; // 取りこぼした場合の補正
@@ -132,6 +134,11 @@ export async function recordWebM(project, audioBuffer, onProgress) {
   renderer.dispose();
 
   const webmBlob = new Blob(chunks, { type: 'video/webm' });
+  console.log(
+    `[録画診断] totalDuration=${totalDuration.toFixed(2)}秒, 目標fps=${fps}, ` +
+    `requestFrame呼び出し回数=${requestFrameCallCount}（理論値は約${Math.ceil(totalDuration * fps)}回）, ` +
+    `手動フレーム送出対応=${supportsManualFrame}, 出力サイズ=${(webmBlob.size / 1024 / 1024).toFixed(2)}MB`
+  );
   return { webmBlob, totalDuration, width, height, fps };
 }
 
@@ -141,7 +148,7 @@ export async function recordWebM(project, audioBuffer, onProgress) {
  */
 let ffmpegInstance = null;
 
-export async function convertWebmToMp4(webmBlob, onProgress, onStatusText) {
+export async function convertWebmToMp4(webmBlob, onProgress, onStatusText, targetFps = 30) {
   if (!window.FFmpeg) {
     throw new Error('ffmpeg.wasm が読み込まれていません。');
   }
@@ -201,6 +208,10 @@ export async function convertWebmToMp4(webmBlob, onProgress, onStatusText) {
     await Promise.race([
       ffmpegInstance.run(
         '-i', 'input.webm',
+        // 録画段階でブラウザが大量の重複フレームを記録してしまうことがあるため、
+        // mpdecimateで内容が重複したフレームを除去したうえで、fpsフィルタで指定フレームレートに正規化する。
+        // これにより、入力に異常な数のフレームが含まれていても処理対象が減り、出力の長さ・滑らかさも正しくなる。
+        '-vf', `mpdecimate,setpts=N/FRAME_RATE/TB,fps=${targetFps}`,
         '-c:v', 'libx264',
         '-preset', 'fast',
         '-crf', '20',
