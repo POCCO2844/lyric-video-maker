@@ -3,6 +3,7 @@ const { useState } = React;
 import { listEffects, getEffect } from '../effects/index.js';
 import { FONT_OPTIONS } from './LeftPanel.js';
 import { fmtTime, clamp } from '../uiUtils.js';
+import { NumberField } from './NumberField.js';
 
 export function RightPanel({ project, selectedLineId, updateProject, currentTime, setCurrentTime }) {
   const line = project.lyrics.find(l => l.id === selectedLineId);
@@ -48,16 +49,18 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
         <div className="field-row">
           <div className="field">
             <label>開始 ({fmtTime(line.start)})</label>
-            <input
-              type="number" step="0.01" value={line.start.toFixed(2)}
-              onChange={(e) => patchLine({ start: Math.min(Number(e.target.value), line.end - 0.05) })}
+            <NumberField
+              value={Number(line.start.toFixed(2))}
+              step="0.01"
+              onCommit={(n) => patchLine({ start: Math.min(n, line.end - 0.05) })}
             />
           </div>
           <div className="field">
             <label>終了 ({fmtTime(line.end)})</label>
-            <input
-              type="number" step="0.01" value={line.end.toFixed(2)}
-              onChange={(e) => patchLine({ end: Math.max(Number(e.target.value), line.start + 0.05) })}
+            <NumberField
+              value={Number(line.end.toFixed(2))}
+              step="0.01"
+              onCommit={(n) => patchLine({ end: Math.max(n, line.start + 0.05) })}
             />
           </div>
         </div>
@@ -93,10 +96,11 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
         <div className="field-row">
           <div className="field">
             <label>文字サイズ</label>
-            <input
-              type="number" placeholder="全体設定を使用"
+            <NumberField
               value={line.fontSize || ''}
-              onChange={(e) => patchLine({ fontSize: e.target.value ? Number(e.target.value) : null })}
+              placeholder="全体設定を使用"
+              allowEmpty
+              onCommit={(n) => patchLine({ fontSize: n })}
             />
           </div>
           <div className="field">

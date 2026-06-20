@@ -1,6 +1,7 @@
 // videoExport.js — Canvas + 音声を録画し、ffmpeg.wasm で MP4 に変換する
 
 import { LyricRenderer } from './renderer.js';
+import { computeTotalDuration } from './uiUtils.js';
 
 /**
  * オフスクリーンCanvasで全フレームを描画しながら録画する。
@@ -14,16 +15,20 @@ export async function recordWebM(project, audioBuffer, onProgress) {
   const height = settings.height || 1080;
   const fps = settings.fps || 30;
 
-  const totalDuration = Math.max(
-    audioBuffer ? audioBuffer.duration : 0,
-    ...lyrics.map(l => l.end),
-    0.1
-  );
-
   const canvas = document.createElement('canvas');
   canvas.width = width;
   canvas.height = height;
   const renderer = new LyricRenderer(canvas, project);
+
+  // 背景動画がある場合は、その長さを取得してから全体の長さを確定する
+  // （ループOFF時は背景動画の長さで全体を打ち切るため）。
+  const bgVideoDuration = await renderer.getBgVideoDuration();
+  const totalDuration = computeTotalDuration({
+    audioDuration: audioBuffer ? audioBuffer.duration : 0,
+    lyrics,
+    settings,
+    bgVideoDuration,
+  });
 
   // --- 音声トラックの準備 ---
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();

@@ -2,6 +2,7 @@
 const { useRef, useState } = React;
 import { parseLyricsAuto, exportLrc } from '../lyricsParser.js';
 import { extractAudioFromVideoFile, isVideoFile } from '../uiUtils.js';
+import { NumberField } from './NumberField.js';
 
 const FONT_OPTIONS = [
   { value: "'Noto Sans JP', sans-serif", label: 'Noto Sans JP（ゴシック）' },
@@ -290,10 +291,9 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
         <div className="field-row">
           <div className="field">
             <label>デフォルト文字サイズ (px)</label>
-            <input
-              type="number"
+            <NumberField
               value={project.settings.defaultFontSize}
-              onChange={(e) => updateProject(p => ({ ...p, settings: { ...p.settings, defaultFontSize: Number(e.target.value) } }))}
+              onCommit={(n) => updateProject(p => ({ ...p, settings: { ...p.settings, defaultFontSize: n } }))}
             />
           </div>
           <div className="field">

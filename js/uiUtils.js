@@ -8,6 +8,25 @@ export function fmtTime(t) {
 
 export function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
+// プロジェクト全体の動画の長さ（秒）を計算する。
+// - 通常は「音楽の長さ」と「歌詞の最終終了時刻」の長い方を採用する。
+// - 背景動画が設定されていて、かつループ再生がOFFの場合は、
+//   音楽がまだ鳴っていても背景動画が終わった時点で映像を終わらせたいため、
+//   背景動画の長さで上限をかける（背景動画の長さを超えないようにする）。
+// bgVideoDuration は呼び出し側で <video>.duration 等から取得して渡す（未取得ならundefined可）。
+export function computeTotalDuration({ audioDuration, lyrics, settings, bgVideoDuration }) {
+  const base = Math.max(
+    audioDuration || 0,
+    ...((lyrics || []).map(l => l.end)),
+    0.1
+  );
+  const hasNonLoopingBgVideo = settings?.bgType === 'video' && settings?.bgVideoBlob && settings?.bgVideoLoop === false;
+  if (hasNonLoopingBgVideo && bgVideoDuration && bgVideoDuration > 0) {
+    return Math.min(base, bgVideoDuration);
+  }
+  return base;
+}
+
 // Blob（音声ファイル、または音声トラックが既に抽出済みのもの）をAudioBufferにデコードする。
 export async function decodeAudioBlob(blob) {
   const arrayBuf = await blob.arrayBuffer();

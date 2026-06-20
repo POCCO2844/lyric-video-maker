@@ -1,7 +1,7 @@
 // components/Preview.js
 const { useRef, useEffect, useState } = React;
 import { LyricRenderer } from '../renderer.js';
-import { fmtTime } from '../uiUtils.js';
+import { fmtTime, computeTotalDuration } from '../uiUtils.js';
 
 export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isPlaying, setIsPlaying }) {
   const canvasRef = useRef(null);
@@ -12,7 +12,29 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
   const playStartTimeRef = useRef(0);
   const rafRef = useRef(null);
 
-  const duration = audioBuffer ? audioBuffer.duration : Math.max(...project.lyrics.map(l => l.end), 10);
+  // 背景動画があり、かつループOFFの場合はその長さを上限にする。
+  // 背景動画の長さ取得は非同期（メタデータ読み込み待ち）なので state で保持する。
+  const [duration, setDuration] = useState(() => computeTotalDuration({
+    audioDuration: audioBuffer ? audioBuffer.duration : 0,
+    lyrics: project.lyrics,
+    settings: project.settings,
+    bgVideoDuration: null,
+  }));
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const bgVideoDuration = rendererRef.current ? await rendererRef.current.getBgVideoDuration() : null;
+      if (cancelled) return;
+      setDuration(computeTotalDuration({
+        audioDuration: audioBuffer ? audioBuffer.duration : 0,
+        lyrics: project.lyrics,
+        settings: project.settings,
+        bgVideoDuration,
+      }));
+    })();
+    return () => { cancelled = true; };
+  }, [audioBuffer, project.lyrics, project.settings.bgType, project.settings.bgVideoBlob, project.settings.bgVideoLoop]);
 
   useEffect(() => {
     if (canvasRef.current) {

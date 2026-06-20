@@ -63,6 +63,8 @@ export function Editor({ projectId, onBackHome }) {
     return <div className="empty-hint">読み込み中…</div>;
   }
 
+  // タイムライン編集用の表示範囲（常に「音楽の長さ」基準。背景動画の長さでは絞らない）。
+  // 実際の書き出し時の動画の長さは videoExport.js 側で別途、背景動画の長さを考慮して計算される。
   const duration = Math.max(
     audioBuffer ? audioBuffer.duration : 0,
     ...project.lyrics.map(l => l.end),

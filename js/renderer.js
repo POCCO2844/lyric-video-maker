@@ -38,6 +38,16 @@ export class LyricRenderer {
     this.project = project;
   }
 
+  // 背景動画の長さ（秒）を取得する。背景動画が設定されていない場合は null を返す。
+  // メタデータ読み込み待ちが必要なため非同期。
+  async getBgVideoDuration() {
+    this._ensureBgMediaElements();
+    if (this.project.settings.bgType !== 'video' || !this._bgVideoEl) return null;
+    if (this._bgVideoReadyPromise) await this._bgVideoReadyPromise;
+    const dur = this._bgVideoEl.duration;
+    return (dur && isFinite(dur)) ? dur : null;
+  }
+
   // プロジェクトの背景Blobが変わっていたら、画像/動画要素を作り直す
   _ensureBgMediaElements() {
     const { settings } = this.project;

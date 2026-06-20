@@ -86,6 +86,9 @@ export function ExportModal({ project, audioBuffer, onClose }) {
               {project.settings.bgType === 'video' && (
                 <><br />※ 背景動画を使用しているため、書き出しにやや時間がかかる場合があります。</>
               )}
+              {project.settings.bgType === 'video' && project.settings.bgVideoLoop === false && (
+                <><br />※ 「ループ再生」がオフのため、動画全体の長さは背景動画の長さに合わせて書き出されます（音楽がまだ鳴っていても、背景動画が終わった時点で映像が終了します）。</>
+              )}
             </div>
           </>
         )}
