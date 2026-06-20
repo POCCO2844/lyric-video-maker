@@ -85,10 +85,32 @@ export function newProjectTemplate(name = '新しいプロジェクト') {
       width: 1920,
       height: 1080,
       fps: 30,
-      bgColor: '#00FF00',  // グリーンバック
+      bgColor: '#00FF00',  // グリーンバック（背景タイプが color の場合のみ使用）
       defaultFont: "'Noto Sans JP', sans-serif",
       defaultFontSize: 64,
       defaultColor: '#FFFFFF',
+      // 背景設定
+      bgType: 'color',      // 'color' | 'image' | 'video'
+      bgImageBlob: null,    // Blob（bgType='image'のとき使用）
+      bgImageName: '',
+      bgVideoBlob: null,    // Blob（bgType='video'のとき使用）
+      bgVideoName: '',
+      bgVideoLoop: true,    // 曲より背景動画が短い場合にループするか
+      bgFit: 'cover',        // 'cover' | 'contain' | 'stretch'
+    },
+  };
+}
+
+// 古い形式で保存されたプロジェクト（背景設定フィールドが無いもの等）を
+// 現在のテンプレートで不足分だけ補完する。
+export function migrateProject(project) {
+  const template = newProjectTemplate();
+  return {
+    ...template,
+    ...project,
+    settings: {
+      ...template.settings,
+      ...(project.settings || {}),
     },
   };
 }

@@ -1,6 +1,6 @@
 // components/Editor.js
 const { useState, useEffect, useRef, useCallback } = React;
-import { Storage } from '../storage.js';
+import { Storage, migrateProject } from '../storage.js';
 import { LeftPanel } from './LeftPanel.js';
 import { RightPanel } from './RightPanel.js';
 import { Preview } from './Preview.js';
@@ -23,10 +23,11 @@ export function Editor({ projectId, onBackHome }) {
     (async () => {
       const p = await Storage.getProject(projectId);
       if (cancelled || !p) return;
-      setProject(p);
-      if (p.audioBlob) {
+      const migrated = migrateProject(p);
+      setProject(migrated);
+      if (migrated.audioBlob) {
         try {
-          const buf = await decodeAudioBlob(p.audioBlob);
+          const buf = await decodeAudioBlob(migrated.audioBlob);
           if (!cancelled) setAudioBuffer(buf);
         } catch (e) { console.error('音声デコード失敗', e); }
       }

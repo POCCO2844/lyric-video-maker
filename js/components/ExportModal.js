@@ -43,6 +43,13 @@ export function ExportModal({ project, audioBuffer, onClose }) {
     error: 'エラーが発生しました',
   }[stage];
 
+  const bgDescription = (() => {
+    const t = project.settings.bgType;
+    if (t === 'image') return `背景は設定した画像（${project.settings.bgImageName || '未設定'}）で書き出されます。`;
+    if (t === 'video') return `背景は設定した動画（${project.settings.bgVideoName || '未設定'}）で書き出されます。`;
+    return `背景は単色（${project.settings.bgColor}）として書き出されます。`;
+  })();
+
   return (
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget && stage !== 'recording' && stage !== 'converting') onClose(); }}>
       <div className="modal">
@@ -58,8 +65,11 @@ export function ExportModal({ project, audioBuffer, onClose }) {
               </select>
             </div>
             <div style={{ fontSize: 12, color: 'var(--ink-2)', marginTop: 10 }}>
-              背景はグリーンバック（{project.settings.bgColor}）として書き出されます。
-              解像度: {project.settings.width}×{project.settings.height} / {project.settings.fps}fps
+              {bgDescription}
+              <br />解像度: {project.settings.width}×{project.settings.height} / {project.settings.fps}fps
+              {project.settings.bgType === 'video' && (
+                <><br />※ 背景動画を使用しているため、書き出しにやや時間がかかる場合があります。</>
+              )}
             </div>
           </>
         )}

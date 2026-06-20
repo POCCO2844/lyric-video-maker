@@ -71,13 +71,18 @@ export async function recordWebM(project, audioBuffer, onProgress) {
   recorder.start(100); // 100msごとにチャンクを切る
 
   const startTime = performance.now();
+  const hasBgVideo = settings.bgType === 'video' && !!settings.bgVideoBlob;
 
   // 描画ループ：実時間に合わせて毎フレーム再描画する
+  // 背景動画がある場合は、フレームごとに動画のシーク完了を待ってから描画する（コマ落ち防止のため）。
   let rafId;
   await new Promise((resolve) => {
-    function tick() {
+    async function tick() {
       const elapsedSec = (performance.now() - startTime) / 1000;
       const t = Math.min(elapsedSec, totalDuration);
+      if (hasBgVideo) {
+        await renderer.syncBgVideo(t);
+      }
       renderer.renderFrame(t);
       if (onProgress) onProgress(t / totalDuration, 'recording');
       if (elapsedSec >= totalDuration) {
@@ -100,6 +105,7 @@ export async function recordWebM(project, audioBuffer, onProgress) {
   }
   await recordingDone;
   audioCtx.close();
+  renderer.dispose();
 
   const webmBlob = new Blob(chunks, { type: 'video/webm' });
   return { webmBlob, totalDuration, width, height, fps };

@@ -17,7 +17,11 @@ const FONT_OPTIONS = [
 export function LeftPanel({ project, updateProject, onAudioLoaded }) {
   const audioInputRef = useRef(null);
   const lyricsFileInputRef = useRef(null);
+  const bgImageInputRef = useRef(null);
+  const bgVideoInputRef = useRef(null);
   const [dragAudio, setDragAudio] = useState(false);
+  const [dragBgImage, setDragBgImage] = useState(false);
+  const [dragBgVideo, setDragBgVideo] = useState(false);
   const [lyricsText, setLyricsText] = useState(() => exportLrc(project.lyrics || []));
 
   async function handleAudioFile(file) {
@@ -32,6 +36,16 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
     setDragAudio(false);
     const file = e.dataTransfer.files?.[0];
     if (file) handleAudioFile(file);
+  }
+
+  function handleBgImageFile(file) {
+    if (!file) return;
+    updateProject(p => ({ ...p, settings: { ...p.settings, bgImageBlob: file, bgImageName: file.name } }));
+  }
+
+  function handleBgVideoFile(file) {
+    if (!file) return;
+    updateProject(p => ({ ...p, settings: { ...p.settings, bgVideoBlob: file, bgVideoName: file.name } }));
   }
 
   function applyLyricsText(text) {
@@ -138,13 +152,106 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
           </select>
         </div>
         <div className="field">
-          <label>背景色（グリーンバック）</label>
-          <input
-            type="color"
-            value={project.settings.bgColor}
-            onChange={(e) => updateProject(p => ({ ...p, settings: { ...p.settings, bgColor: e.target.value } }))}
-          />
+          <label>背景の種類</label>
+          <select
+            value={project.settings.bgType || 'color'}
+            onChange={(e) => updateProject(p => ({ ...p, settings: { ...p.settings, bgType: e.target.value } }))}
+          >
+            <option value="color">単色（グリーンバック等）</option>
+            <option value="image">画像</option>
+            <option value="video">動画</option>
+          </select>
         </div>
+
+        {(!project.settings.bgType || project.settings.bgType === 'color') && (
+          <div className="field">
+            <label>背景色（グリーンバック）</label>
+            <input
+              type="color"
+              value={project.settings.bgColor}
+              onChange={(e) => updateProject(p => ({ ...p, settings: { ...p.settings, bgColor: e.target.value } }))}
+            />
+          </div>
+        )}
+
+        {project.settings.bgType === 'image' && (
+          <div className="field">
+            <label>背景画像</label>
+            <div
+              className={`dropzone ${dragBgImage ? 'drag' : ''}`}
+              onClick={() => bgImageInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragBgImage(true); }}
+              onDragLeave={() => setDragBgImage(false)}
+              onDrop={(e) => {
+                e.preventDefault(); setDragBgImage(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleBgImageFile(file);
+              }}
+            >
+              クリックまたはドラッグ＆ドロップで背景画像を読み込み（jpg / png 等）
+              {project.settings.bgImageName && <div className="fname">🖼 {project.settings.bgImageName}</div>}
+            </div>
+            <input
+              ref={bgImageInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={(e) => handleBgImageFile(e.target.files?.[0])}
+            />
+          </div>
+        )}
+
+        {project.settings.bgType === 'video' && (
+          <div className="field">
+            <label>背景動画</label>
+            <div
+              className={`dropzone ${dragBgVideo ? 'drag' : ''}`}
+              onClick={() => bgVideoInputRef.current?.click()}
+              onDragOver={(e) => { e.preventDefault(); setDragBgVideo(true); }}
+              onDragLeave={() => setDragBgVideo(false)}
+              onDrop={(e) => {
+                e.preventDefault(); setDragBgVideo(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleBgVideoFile(file);
+              }}
+            >
+              クリックまたはドラッグ＆ドロップで背景動画を読み込み（mp4 / webm 等）
+              {project.settings.bgVideoName && <div className="fname">🎬 {project.settings.bgVideoName}</div>}
+            </div>
+            <input
+              ref={bgVideoInputRef}
+              type="file"
+              accept="video/*"
+              style={{ display: 'none' }}
+              onChange={(e) => handleBgVideoFile(e.target.files?.[0])}
+            />
+            <div className="field" style={{ marginTop: 8 }}>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={project.settings.bgVideoLoop !== false}
+                  onChange={(e) => updateProject(p => ({ ...p, settings: { ...p.settings, bgVideoLoop: e.target.checked } }))}
+                  style={{ marginRight: 6 }}
+                />
+                曲より背景動画が短い場合はループ再生する
+              </label>
+            </div>
+          </div>
+        )}
+
+        {(project.settings.bgType === 'image' || project.settings.bgType === 'video') && (
+          <div className="field">
+            <label>背景の合わせ方</label>
+            <select
+              value={project.settings.bgFit || 'cover'}
+              onChange={(e) => updateProject(p => ({ ...p, settings: { ...p.settings, bgFit: e.target.value } }))}
+            >
+              <option value="cover">画面いっぱいに拡大（はみ出た部分はカット）</option>
+              <option value="contain">全体が収まるように表示（余白は黒）</option>
+              <option value="stretch">画面サイズに引き伸ばす</option>
+            </select>
+          </div>
+        )}
         <div className="field">
           <label>デフォルトフォント</label>
           <select

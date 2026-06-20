@@ -16,18 +16,30 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
 
   useEffect(() => {
     if (canvasRef.current) {
+      if (rendererRef.current) rendererRef.current.dispose();
       canvasRef.current.width = project.settings.width;
       canvasRef.current.height = project.settings.height;
       rendererRef.current = new LyricRenderer(canvasRef.current, project);
     }
   }, [project.settings.width, project.settings.height]);
 
+  // コンポーネントのアンマウント時にも後始末する
+  useEffect(() => {
+    return () => { if (rendererRef.current) rendererRef.current.dispose(); };
+  }, []);
+
   useEffect(() => {
     if (rendererRef.current) {
       rendererRef.current.setProject(project);
-      rendererRef.current.renderFrame(currentTime);
+      if (!isPlaying) {
+        // 停止中：背景動画があれば指定時刻にシークしてから描画する
+        rendererRef.current.syncBgVideo(currentTime).then(() => {
+          rendererRef.current.renderFrame(currentTime);
+        });
+      }
+      // 再生中の描画は tick() ループ側が担当する（ここでは行わない）
     }
-  }, [project, currentTime]);
+  }, [project, currentTime, isPlaying]);
 
   // 再生制御
   useEffect(() => {
@@ -61,6 +73,10 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
         setCurrentTime(duration);
         setIsPlaying(false);
         return;
+      }
+      if (rendererRef.current) {
+        rendererRef.current.syncBgVideo(t); // 非同期だが結果を待たずに描画を進める（再生中はズレ許容）
+        rendererRef.current.renderFrame(t);
       }
       setCurrentTime(t);
       rafRef.current = requestAnimationFrame(tick);
