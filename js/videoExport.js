@@ -82,7 +82,6 @@ export async function recordWebM(project, audioBuffer, onProgress) {
 
   recorder.start(100); // 100msごとにチャンクを切る
 
-  const startTime = performance.now();
   const hasBgVideo = settings.bgType === 'video' && !!settings.bgVideoBlob;
   const frameIntervalMs = 1000 / fps;
   let nextFrameAt = 0; // totalDuration基準での次フレーム送出タイミング（秒）
@@ -90,7 +89,9 @@ export async function recordWebM(project, audioBuffer, onProgress) {
 
   // 描画ループ：実時間に合わせて再描画しつつ、指定fps間隔でのみフレームをエンコーダに送出する。
   // 背景動画がある場合は、フレームごとに動画のシーク完了を待ってから描画する（コマ落ち防止のため）。
+  // startTime は「音声の再生を開始した瞬間」を基準にする（映像と音声のタイムライン基準を一致させ、ズレを防ぐため）。
   let rafId;
+  let startTime;
   await new Promise((resolve) => {
     async function tick() {
       const elapsedSec = (performance.now() - startTime) / 1000;
@@ -118,6 +119,14 @@ export async function recordWebM(project, audioBuffer, onProgress) {
       rafId = requestAnimationFrame(tick);
     }
     if (sourceNode) sourceNode.start(0);
+    startTime = performance.now(); // 音声開始の直後を基準時刻にする
+    // 最初のフレームを即座に1枚送出してから、以後はtickループに任せる
+    renderer.renderFrame(0);
+    if (supportsManualFrame) {
+      videoTrack.requestFrame();
+      requestFrameCallCount++;
+    }
+    nextFrameAt = frameIntervalMs / 1000;
     rafId = requestAnimationFrame(tick);
   });
   cancelAnimationFrame(rafId);
@@ -207,13 +216,12 @@ export async function convertWebmToMp4(webmBlob, onProgress, onStatusText, targe
   try {
     await Promise.race([
       ffmpegInstance.run(
-        // 録画されたWebMは可変フレームレート(VFR)のタイムスタンプを持っており、
-        // 何も指定しないとffmpegがフレーム間隔を一定だと誤解釈し、
-        // 大量のフレームを補間生成してしまうことがある（変換が極端に遅くなる原因）。
-        // 入力オプションとして -r を明示することで、この誤った補間を防ぐ。
-        '-r', String(targetFps),
         '-i', 'input.webm',
-        '-vf', `fps=${targetFps}`,
+        // 録画されたWebMは可変フレームレート(VFR)で、ブラウザの実装によっては重複フレームが多く記録されることがある。
+        // mpdecimateで内容が重複したフレームを間引きつつ、fpsフィルタで指定フレームレートに正規化する。
+        // setpts等でタイムスタンプを人為的に再生成すると音声とのズレの原因になるため使わない
+        // （mpdecimateとfpsフィルタは実際のタイムスタンプを尊重したまま処理してくれる）。
+        '-vf', `mpdecimate,fps=${targetFps}`,
         '-c:v', 'libx264',
         '-preset', 'fast',
         '-crf', '20',
