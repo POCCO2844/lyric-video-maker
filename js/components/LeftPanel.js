@@ -1,5 +1,5 @@
 // components/LeftPanel.js
-const { useRef, useState } = React;
+const { useRef, useState, useEffect } = React;
 import { parseLyricsAuto, exportLrc } from '../lyricsParser.js';
 import { extractAudioFromVideoFile, isVideoFile } from '../uiUtils.js';
 import { NumberField } from './NumberField.js';
@@ -27,6 +27,20 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
   const [lyricsText, setLyricsText] = useState(() => exportLrc(project.lyrics || []));
   const [audioExtracting, setAudioExtracting] = useState(false);
   const [audioLoadError, setAudioLoadError] = useState('');
+  const lyricsTextareaRef = useRef(null);
+  const isEditingLyricsRef = useRef(false); // テキストエリアにフォーカス中かどうか
+  const lastSyncedLyricsRef = useRef(project.lyrics); // 最後にテキストエリアへ反映した時点のlyrics（自己更新ループ防止用）
+
+  // project.lyrics がタイムライン操作（行の追加・削除・ドラッグでのタイミング変更等）で変わった時、
+  // テキストエリアの表示内容も自動的に追従させる。
+  // ただし、ユーザーが今まさにテキストエリアを編集中の場合は、入力中の内容を消さないよう同期しない。
+  useEffect(() => {
+    if (project.lyrics === lastSyncedLyricsRef.current) return; // このコンポーネント自身の更新による再呼び出しは無視
+    if (isEditingLyricsRef.current) return; // 編集中は触らない
+    setLyricsText(exportLrc(project.lyrics || []));
+    lastSyncedLyricsRef.current = project.lyrics;
+  }, [project.lyrics]);
+  const isComposingRef = useRef(false); // IME変換中フラグ（日本語入力中の誤反映を防ぐ）
 
   async function handleAudioFile(file) {
     if (!file) return;
@@ -72,13 +86,30 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
   function applyLyricsText(text) {
     setLyricsText(text);
     const parsed = parseLyricsAuto(text);
-    // 既存の手動タイミングをできるだけ保持（テキストが一致する行はそのまま）
+    // タイミング（start/end）はテキストエリア内のLRCタイムスタンプをそのまま信頼して使う
+    // （ユーザーがテキストを直接編集してタイミングを変えた場合、それを正としたいため）。
+    // 表示エフェクトやフォント等のスタイル設定だけは、同じ歌詞テキストの行から引き継ぐ。
+    // 同一テキストが複数行ある場合は、出現順（n番目の同じ文言）で対応付けることで誤った混線を防ぐ。
     updateProject(p => {
-      const oldByText = new Map(p.lyrics.map(l => [l.text, l]));
-      const merged = parsed.map(line => {
-        const old = oldByText.get(line.text);
-        return old ? { ...line, start: old.start, end: old.end, effect: old.effect, effectParams: old.effectParams, font: old.font, fontSize: old.fontSize, color: old.color, x: old.x, y: old.y } : line;
+      const oldLines = [...p.lyrics].sort((a, b) => a.start - b.start);
+      const usedOldIds = new Set();
+      const merged = parsed.map((line) => {
+        const old = oldLines.find(o => !usedOldIds.has(o.id) && o.text === line.text);
+        if (!old) return line;
+        usedOldIds.add(old.id);
+        return {
+          ...line,
+          id: old.id, // idも引き継ぐことで、選択中の行が編集後も選択され続けるようにする
+          effect: old.effect,
+          effectParams: old.effectParams,
+          font: old.font,
+          fontSize: old.fontSize,
+          color: old.color,
+          x: old.x,
+          y: old.y,
+        };
       });
+      lastSyncedLyricsRef.current = merged; // この更新はテキストエリア起点なので、次のuseEffectでの再同期をスキップする
       return { ...p, lyrics: merged };
     });
   }
@@ -123,9 +154,30 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
         <div className="field">
           <label>LRC形式 または プレーンテキスト（1行＝1フレーズ）を貼り付け／読み込み</label>
           <textarea
+            ref={lyricsTextareaRef}
             className="lyrics-input"
             value={lyricsText}
-            onChange={(e) => applyLyricsText(e.target.value)}
+            onFocus={() => { isEditingLyricsRef.current = true; }}
+            onCompositionStart={() => { isComposingRef.current = true; }}
+            onCompositionEnd={(e) => {
+              isComposingRef.current = false;
+              applyLyricsText(e.target.value);
+            }}
+            onBlur={() => {
+              isEditingLyricsRef.current = false;
+              // フォーカスが外れたら、念のため最新のプロジェクトの歌詞でテキスト表示を同期し直す
+              // （編集中にタイムライン側で行が追加・削除されていた場合の取りこぼし防止）。
+              setLyricsText(exportLrc(project.lyrics || []));
+              lastSyncedLyricsRef.current = project.lyrics;
+            }}
+            onChange={(e) => {
+              if (isComposingRef.current) {
+                // IME変換中はプロジェクトへの反映を止め、表示だけ更新する（変換途中の文字でパースが走らないようにするため）
+                setLyricsText(e.target.value);
+                return;
+              }
+              applyLyricsText(e.target.value);
+            }}
             placeholder={"[00:12.50]最初の歌詞\n[00:15.80]次の歌詞\n\n…または タイミングなしのプレーンテキストでもOK"}
           />
         </div>
