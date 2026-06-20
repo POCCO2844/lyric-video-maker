@@ -37,14 +37,21 @@ export async function recordWebM(project, audioBuffer, onProgress) {
   }
 
   // --- 映像トラックの準備 ---
-  // captureStream(fps) で一定間隔の自動キャプチャを行う。
-  // 録画はリアルタイム同期（実際にtotalDuration秒だけ待つ）で行うことで、
-  // ブラウザ間の互換性問題（requestFrameの非対応等）を避ける。
-  const videoStream = canvas.captureStream(fps);
+  // captureStream(fps) の自動キャプチャは、ブラウザによっては実際の描画頻度（ディスプレイのリフレッシュレート等）
+  // に引っ張られて、指定fpsよりはるかに多いフレームを記録してしまうことがある（MP4変換が極端に遅くなる原因）。
+  // そのため captureStream(0) の手動モードを使い、指定fps間隔でのみ明示的にフレームを送出する。
+  const videoStream = canvas.captureStream(0);
   const videoTrack = videoStream.getVideoTracks()[0];
+  const supportsManualFrame = typeof videoTrack.requestFrame === 'function';
+  let fallbackStream = null;
+  if (!supportsManualFrame) {
+    console.warn('このブラウザは captureStream の手動フレーム送出(requestFrame)に対応していないため、自動キャプチャ方式にフォールバックします。');
+    fallbackStream = canvas.captureStream(fps);
+  }
+  const actualVideoTrack = fallbackStream ? fallbackStream.getVideoTracks()[0] : videoTrack;
 
   const combinedStream = new MediaStream();
-  combinedStream.addTrack(videoTrack);
+  combinedStream.addTrack(actualVideoTrack);
   if (audioBuffer) {
     dest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
   }
@@ -72,18 +79,30 @@ export async function recordWebM(project, audioBuffer, onProgress) {
 
   const startTime = performance.now();
   const hasBgVideo = settings.bgType === 'video' && !!settings.bgVideoBlob;
+  const frameIntervalMs = 1000 / fps;
+  let nextFrameAt = 0; // totalDuration基準での次フレーム送出タイミング（秒）
 
-  // 描画ループ：実時間に合わせて毎フレーム再描画する
+  // 描画ループ：実時間に合わせて再描画しつつ、指定fps間隔でのみフレームをエンコーダに送出する。
   // 背景動画がある場合は、フレームごとに動画のシーク完了を待ってから描画する（コマ落ち防止のため）。
   let rafId;
   await new Promise((resolve) => {
     async function tick() {
       const elapsedSec = (performance.now() - startTime) / 1000;
       const t = Math.min(elapsedSec, totalDuration);
-      if (hasBgVideo) {
-        await renderer.syncBgVideo(t);
+
+      // 次に送出すべきフレームのタイミングに達した時だけ描画・送出する（指定fpsを正確に守るため）
+      if (t >= nextFrameAt) {
+        if (hasBgVideo) {
+          await renderer.syncBgVideo(t);
+        }
+        renderer.renderFrame(t);
+        if (supportsManualFrame) {
+          videoTrack.requestFrame();
+        }
+        nextFrameAt += frameIntervalMs / 1000;
+        if (nextFrameAt < t) nextFrameAt = t + frameIntervalMs / 1000; // 取りこぼした場合の補正
       }
-      renderer.renderFrame(t);
+
       if (onProgress) onProgress(t / totalDuration, 'recording');
       if (elapsedSec >= totalDuration) {
         resolve();
