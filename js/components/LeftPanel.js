@@ -1,6 +1,7 @@
 // components/LeftPanel.js
 const { useRef, useState } = React;
 import { parseLyricsAuto, exportLrc } from '../lyricsParser.js';
+import { extractAudioFromVideoFile, isVideoFile } from '../uiUtils.js';
 
 const FONT_OPTIONS = [
   { value: "'Noto Sans JP', sans-serif", label: 'Noto Sans JP（ゴシック）' },
@@ -23,12 +24,30 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
   const [dragBgImage, setDragBgImage] = useState(false);
   const [dragBgVideo, setDragBgVideo] = useState(false);
   const [lyricsText, setLyricsText] = useState(() => exportLrc(project.lyrics || []));
+  const [audioExtracting, setAudioExtracting] = useState(false);
+  const [audioLoadError, setAudioLoadError] = useState('');
 
   async function handleAudioFile(file) {
     if (!file) return;
-    const arrayBuf = await file.arrayBuffer();
-    updateProject(p => ({ ...p, audioBlob: file, audioName: file.name }));
-    onAudioLoaded(file);
+    setAudioLoadError('');
+    try {
+      if (isVideoFile(file)) {
+        // 映像ファイルの場合は音声トラックだけを抽出する（動画の長さと同じ時間がかかる）
+        setAudioExtracting(true);
+        const audioBlob = await extractAudioFromVideoFile(file);
+        const audioFile = new File([audioBlob], file.name.replace(/\.[^.]+$/, '') + ' (音声抽出).webm', { type: audioBlob.type });
+        updateProject(p => ({ ...p, audioBlob: audioFile, audioName: `${file.name}（音声のみ抽出）` }));
+        onAudioLoaded(audioFile);
+      } else {
+        updateProject(p => ({ ...p, audioBlob: file, audioName: file.name }));
+        onAudioLoaded(file);
+      }
+    } catch (e) {
+      console.error('音声の読み込みに失敗しました', e);
+      setAudioLoadError('この映像/音声ファイルから音声を取り出せませんでした。別の形式（mp3, wav, mp4等）でお試しください。');
+    } finally {
+      setAudioExtracting(false);
+    }
   }
 
   function onAudioDrop(e) {
@@ -47,6 +66,7 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
     if (!file) return;
     updateProject(p => ({ ...p, settings: { ...p.settings, bgVideoBlob: file, bgVideoName: file.name } }));
   }
+
 
   function applyLyricsText(text) {
     setLyricsText(text);
@@ -74,18 +94,24 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
         <h2>音楽ファイル</h2>
         <div
           className={`dropzone ${dragAudio ? 'drag' : ''}`}
-          onClick={() => audioInputRef.current?.click()}
+          onClick={() => !audioExtracting && audioInputRef.current?.click()}
           onDragOver={(e) => { e.preventDefault(); setDragAudio(true); }}
           onDragLeave={() => setDragAudio(false)}
           onDrop={onAudioDrop}
+          style={audioExtracting ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
         >
-          クリックまたはドラッグ＆ドロップで音楽ファイルを読み込み（mp3 / wav / m4a 等）
-          {project.audioName && <div className="fname">♪ {project.audioName}</div>}
+          クリックまたはドラッグ＆ドロップで音楽・映像ファイルを読み込み
+          <br />（mp3 / wav / m4a / mp4 / mov 等。映像ファイルの場合は音声だけを取り出します）
+          {audioExtracting && <div className="fname">⏳ 音声を抽出しています…（映像の長さと同じくらい時間がかかります）</div>}
+          {!audioExtracting && project.audioName && <div className="fname">♪ {project.audioName}</div>}
         </div>
+        {audioLoadError && (
+          <div style={{ color: 'var(--danger)', fontSize: 12, marginTop: 6 }}>{audioLoadError}</div>
+        )}
         <input
           ref={audioInputRef}
           type="file"
-          accept="audio/*"
+          accept="audio/*,video/*"
           style={{ display: 'none' }}
           onChange={(e) => handleAudioFile(e.target.files?.[0])}
         />
