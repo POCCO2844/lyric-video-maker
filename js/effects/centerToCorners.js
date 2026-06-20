@@ -10,7 +10,9 @@ registerEffect({
     { key: 'scatterRatio', label: '飛散にかける割合', type: 'range', min: 0.1, max: 0.6, step: 0.05, default: 0.35 },
   ],
   draw(ctx, p) {
-    const { text, progress, canvasW, canvasH, font, fontSize, color, params } = p;
+    // x, y は行ごとの「表示位置」設定（右パネルのX位置/Y位置スライダー）を、
+    // 分解が始まる開始位置（中央表示の位置）として使う。
+    const { text, progress, canvasW, canvasH, x, y, font, fontSize, color, params } = p;
     const chars = toChars(text);
     const { widths, total } = measureChars(ctx, chars, font, fontSize);
     const holdRatio = params.holdRatio ?? 0.4;
@@ -24,8 +26,10 @@ registerEffect({
       { x: 0.92 * canvasW, y: 0.9 * canvasH },
     ];
 
-    let cx = canvasW / 2 - total / 2;
-    const cy = canvasH / 2;
+    const originX = x * canvasW;
+    const originY = y * canvasH;
+    let cx = originX - total / 2;
+    const cy = originY;
 
     ctx.save();
     setTextStyle(ctx, font, fontSize, color);

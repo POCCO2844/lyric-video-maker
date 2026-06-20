@@ -10,5 +10,6 @@ import './charScatterRotate.js';
 import './centerToCorners.js';
 import './flyInFromAllDirections.js';
 import './circleRotate.js';
+import './rectanglePatrol.js';
 
 export { registerEffect, getEffect, listEffects } from './registry.js';

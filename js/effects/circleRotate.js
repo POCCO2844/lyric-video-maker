@@ -15,6 +15,7 @@ registerEffect({
     { key: 'fadeRatio', label: 'フェードイン/アウト割合', type: 'range', min: 0, max: 0.3, step: 0.01, default: 0.1 },
   ],
   draw(ctx, p) {
+    // x, y は行ごとの「表示位置」設定（右パネルのX位置/Y位置スライダー）を円の中心座標として使う。
     const { text, progress, duration, canvasW, canvasH, x, y, font, fontSize, color, params } = p;
     const chars = toChars(text);
     const { widths } = measureChars(ctx, chars, font, fontSize);

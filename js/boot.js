@@ -14,6 +14,7 @@ const FILES = [
   'js/effects/centerToCorners.js',
   'js/effects/flyInFromAllDirections.js',
   'js/effects/circleRotate.js',
+  'js/effects/rectanglePatrol.js',
   'js/effects/index.js',
   'js/storage.js',
   'js/lyricsParser.js',
