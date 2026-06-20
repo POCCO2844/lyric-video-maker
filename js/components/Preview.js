@@ -75,7 +75,7 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
         return;
       }
       if (rendererRef.current) {
-        rendererRef.current.syncBgVideo(t); // 非同期だが結果を待たずに描画を進める（再生中はズレ許容）
+        rendererRef.current.syncBgVideo(t, { live: true }); // 非同期だが結果を待たずに描画を進める（動画は自走再生）
         rendererRef.current.renderFrame(t);
       }
       setCurrentTime(t);

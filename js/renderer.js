@@ -62,7 +62,13 @@ export class LyricRenderer {
         video.src = url;
         video.muted = true;
         video.playsInline = true;
-        video.loop = false; // ループは手動で時刻計算して行う
+        video.loop = false; // ループはこのクラス側で時刻計算して制御する
+        video.addEventListener('ended', () => {
+          if (this.project.settings.bgVideoLoop) {
+            video.currentTime = 0;
+            video.play().catch(() => {});
+          }
+        });
         this._bgVideoEl = video;
         this._bgVideoBlobRef = settings.bgVideoBlob;
         this._bgVideoReadyPromise = new Promise((resolve) => {
@@ -78,7 +84,10 @@ export class LyricRenderer {
 
   // 背景動画を時刻 t に同期させる（ループ対応）。
   // 動画のシークは非同期なので、書き出し時は await syncBgVideo(t) を必ず呼ぶこと。
-  async syncBgVideo(t) {
+  // live=true（プレビュー再生中）の場合は、動画自体を再生させて自然に時間を進め、
+  // ループ境界をまたぐ時だけシークする（毎フレームのシークによるチラつきを避けるため）。
+  // live=false（書き出し時・停止中のシーク時）は、毎回正確に指定時刻へシークする。
+  async syncBgVideo(t, { live = false } = {}) {
     this._ensureBgMediaElements();
     const { settings } = this.project;
     if (settings.bgType !== 'video' || !this._bgVideoEl) return;
@@ -93,8 +102,21 @@ export class LyricRenderer {
     } else {
       target = Math.min(t, dur);
     }
-    // 大きくズレている時だけシーク（毎フレームのseekはコストが高いため）
-    if (Math.abs(video.currentTime - target) > 0.08) {
+
+    if (live) {
+      // 自走再生モード：大きくズレた時（シークバー操作直後やループ境界）だけ合わせ直す
+      if (Math.abs(video.currentTime - target) > 0.3) {
+        try { video.currentTime = target; } catch (e) { /* noop */ }
+      }
+      if (video.paused) {
+        try { await video.play(); } catch (e) { /* 自動再生制限等は無視 */ }
+      }
+      return;
+    }
+
+    // 高精度モード（書き出し用）：毎回正確にシークしてから完了を待つ
+    if (!video.paused) video.pause();
+    if (Math.abs(video.currentTime - target) > 0.01) {
       await new Promise((resolve) => {
         const onSeeked = () => { video.removeEventListener('seeked', onSeeked); resolve(); };
         video.addEventListener('seeked', onSeeked);
@@ -124,6 +146,14 @@ export class LyricRenderer {
       const { dx, dy, dw, dh } = computeFitRect(video.videoWidth, video.videoHeight, canvas.width, canvas.height, settings.bgFit);
       if (settings.bgFit === 'contain') { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
       ctx.drawImage(video, dx, dy, dw, dh);
+      return;
+    }
+
+    // 背景が画像/動画に設定されているのに、まだ準備中（読み込み中・シーク中）の場合は
+    // 単色背景（グリーンバック色）にフォールバックすると一瞬チラついて見えるため、黒で代用する。
+    if (settings.bgType === 'video' || settings.bgType === 'image') {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
       return;
     }
 
