@@ -282,7 +282,7 @@ textarea.lyrics-input { min-height: 140px; resize: vertical; font-family: var(--
 }
 .lyric-block {
   position: absolute;
-  top: 4px; bottom: 4px;
+  height: 22px;
   background: var(--accent-soft);
   border: 1px solid var(--accent);
   border-radius: 5px;
@@ -297,9 +297,10 @@ textarea.lyrics-input { min-height: 140px; resize: vertical; font-family: var(--
   cursor: grab;
   user-select: none;
 }
-.lyric-block.selected { background: rgba(110,231,183,0.32); border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+.lyric-block.selected { background: rgba(110,231,183,0.32); border-color: #fff; box-shadow: 0 0 0 1px #fff; z-index: 10; }
 .lyric-block .handle {
-  position: absolute; top: 0; bottom: 0; width: 7px; cursor: ew-resize;
+  position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize;
+  z-index: 1;
 }
 .lyric-block .handle.l { left: 0; }
 .lyric-block .handle.r { right: 0; }
