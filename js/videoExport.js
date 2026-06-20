@@ -207,11 +207,13 @@ export async function convertWebmToMp4(webmBlob, onProgress, onStatusText, targe
   try {
     await Promise.race([
       ffmpegInstance.run(
+        // 録画されたWebMは可変フレームレート(VFR)のタイムスタンプを持っており、
+        // 何も指定しないとffmpegがフレーム間隔を一定だと誤解釈し、
+        // 大量のフレームを補間生成してしまうことがある（変換が極端に遅くなる原因）。
+        // 入力オプションとして -r を明示することで、この誤った補間を防ぐ。
+        '-r', String(targetFps),
         '-i', 'input.webm',
-        // 録画段階でブラウザが大量の重複フレームを記録してしまうことがあるため、
-        // mpdecimateで内容が重複したフレームを除去したうえで、fpsフィルタで指定フレームレートに正規化する。
-        // これにより、入力に異常な数のフレームが含まれていても処理対象が減り、出力の長さ・滑らかさも正しくなる。
-        '-vf', `mpdecimate,setpts=N/FRAME_RATE/TB,fps=${targetFps}`,
+        '-vf', `fps=${targetFps}`,
         '-c:v', 'libx264',
         '-preset', 'fast',
         '-crf', '20',
