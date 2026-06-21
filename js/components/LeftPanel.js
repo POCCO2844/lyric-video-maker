@@ -86,9 +86,12 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
   function applyLyricsText(text) {
     setLyricsText(text);
     const parsed = parseLyricsAuto(text);
-    // タイミング（start/end）はテキストエリア内のLRCタイムスタンプをそのまま信頼して使う
+    // タイミングの開始時刻（start）はテキストエリア内のLRCタイムスタンプをそのまま信頼して使う
     // （ユーザーがテキストを直接編集してタイミングを変えた場合、それを正としたいため）。
-    // 表示エフェクトやフォント等のスタイル設定だけは、同じ歌詞テキストの行から引き継ぐ。
+    // 終了時刻（end）はLRC形式に保存されていないため（LRCは開始時刻のみの仕様）、
+    // 対応する古い行があれば、その行の長さ（end - start）を維持する形で復元する
+    // （タイムラインで手動調整した終了位置が、テキスト編集のたびにリセットされるのを防ぐため）。
+    // 表示エフェクトやフォント等のスタイル設定も同様に、同じ歌詞テキストの行から引き継ぐ。
     // 同一テキストが複数行ある場合は、出現順（n番目の同じ文言）で対応付けることで誤った混線を防ぐ。
     updateProject(p => {
       const oldLines = [...p.lyrics].sort((a, b) => a.start - b.start);
@@ -97,9 +100,11 @@ export function LeftPanel({ project, updateProject, onAudioLoaded }) {
         const old = oldLines.find(o => !usedOldIds.has(o.id) && o.text === line.text);
         if (!old) return line;
         usedOldIds.add(old.id);
+        const oldDuration = Math.max(old.end - old.start, 0.1);
         return {
           ...line,
           id: old.id, // idも引き継ぐことで、選択中の行が編集後も選択され続けるようにする
+          end: line.start + oldDuration, // 古い行の長さを維持して終了位置を復元する
           effect: old.effect,
           effectParams: old.effectParams,
           font: old.font,

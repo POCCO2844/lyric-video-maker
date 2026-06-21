@@ -1,6 +1,7 @@
 // components/RightPanel.js
 const { useState } = React;
 import { listEffects, getEffect } from '../effects/index.js';
+import { listTextStyles, getTextStyle } from '../effects/textStyles/index.js';
 import { FONT_OPTIONS } from './LeftPanel.js';
 import { fmtTime, clamp } from '../uiUtils.js';
 import { NumberField } from './NumberField.js';
@@ -29,7 +30,50 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
     patchLine({ effectParams: { ...line.effectParams, [key]: value } });
   }
 
+  function patchTextStyleParams(key, value) {
+    patchLine({ textStyleParams: { ...(line.textStyleParams || {}), [key]: value } });
+  }
+
+  // 動きエフェクト・文字デザイン共通のパラメータ入力UIをレンダリングする
+  function renderParamField(param, currentParams, onChangeParam) {
+    return (
+      <div className="field" key={param.key}>
+        <label>
+          {param.label}
+          {param.type === 'range' && (
+            <span className="range-val">{currentParams[param.key] ?? param.default}</span>
+          )}
+        </label>
+        {param.type === 'range' && (
+          <input
+            type="range"
+            min={param.min} max={param.max} step={param.step}
+            value={currentParams[param.key] ?? param.default}
+            onChange={(e) => onChangeParam(param.key, Number(e.target.value))}
+          />
+        )}
+        {param.type === 'select' && (
+          <select
+            value={currentParams[param.key] ?? param.default}
+            onChange={(e) => onChangeParam(param.key, e.target.value)}
+          >
+            {param.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        )}
+        {param.type === 'color' && (
+          <input
+            type="color"
+            value={currentParams[param.key] ?? param.default}
+            onChange={(e) => onChangeParam(param.key, e.target.value)}
+          />
+        )}
+      </div>
+    );
+  }
+
   const effectDef = getEffect(line.effect);
+  const textStyles = listTextStyles();
+  const textStyleDef = getTextStyle(line.textStyle);
 
   return (
     <div className="panel right">
@@ -135,32 +179,38 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
       {effectDef.params && effectDef.params.length > 0 && (
         <div className="panel-section">
           <h2>エフェクト詳細パラメータ</h2>
-          {effectDef.params.map(param => (
-            <div className="field" key={param.key}>
-              <label>
-                {param.label}
-                {param.type === 'range' && (
-                  <span className="range-val">{line.effectParams[param.key] ?? param.default}</span>
-                )}
-              </label>
-              {param.type === 'range' && (
-                <input
-                  type="range"
-                  min={param.min} max={param.max} step={param.step}
-                  value={line.effectParams[param.key] ?? param.default}
-                  onChange={(e) => patchParams(param.key, Number(e.target.value))}
-                />
-              )}
-              {param.type === 'select' && (
-                <select
-                  value={line.effectParams[param.key] ?? param.default}
-                  onChange={(e) => patchParams(param.key, e.target.value)}
-                >
-                  {param.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              )}
-            </div>
+          {effectDef.params.map(param => renderParamField(param, line.effectParams, patchParams))}
+        </div>
+      )}
+
+      <div className="panel-section">
+        <h2>文字デザイン（任意）</h2>
+        <div className="effect-grid">
+          <button
+            className={`effect-opt ${!line.textStyle || line.textStyle === 'none' ? 'active' : ''}`}
+            onClick={() => patchLine({ textStyle: 'none', textStyleParams: {} })}
+          >
+            なし（通常の文字）
+          </button>
+          {textStyles.map(ts => (
+            <button
+              key={ts.id}
+              className={`effect-opt ${line.textStyle === ts.id ? 'active' : ''}`}
+              onClick={() => patchLine({ textStyle: ts.id, textStyleParams: {} })}
+            >
+              {ts.label}
+            </button>
           ))}
+        </div>
+        <div style={{ fontSize: 11.5, color: 'var(--ink-2)', marginTop: 8 }}>
+          表示方法（動き）とは独立して、文字そのものの質感を変えられます。組み合わせて使えます。
+        </div>
+      </div>
+
+      {textStyleDef && textStyleDef.params && textStyleDef.params.length > 0 && (
+        <div className="panel-section">
+          <h2>文字デザイン詳細パラメータ</h2>
+          {textStyleDef.params.map(param => renderParamField(param, line.textStyleParams || {}, patchTextStyleParams))}
         </div>
       )}
     </div>

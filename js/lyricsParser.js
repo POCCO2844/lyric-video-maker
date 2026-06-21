@@ -41,6 +41,8 @@ export function parseLrc(text) {
     color: null,
     x: 0.5,             // 0-1 正規化座標（中央=0.5）
     y: 0.5,
+    textStyle: 'none',   // 文字デザイン（none/grid/scanlines/glitch等）
+    textStyleParams: {},
   }));
 }
 
@@ -58,6 +60,8 @@ export function parsePlainText(text) {
     color: null,
     x: 0.5,
     y: 0.5,
+    textStyle: 'none',
+    textStyleParams: {},
   }));
 }
 

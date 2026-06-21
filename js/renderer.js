@@ -1,5 +1,6 @@
 // renderer.js — Canvas に現在時刻の歌詞を描画する共通エンジン（プレビューと録画の両方で使う）
 import { getEffect } from './effects/index.js';
+import { getTextStyle } from './effects/textStyles/index.js';
 
 // cover/contain/stretch に応じた描画矩形を計算する
 function computeFitRect(srcW, srcH, dstW, dstH, fit) {
@@ -187,6 +188,25 @@ export class LyricRenderer {
       const font = line.font || settings.defaultFont;
       const fontSize = line.fontSize || settings.defaultFontSize;
       const color = line.color || settings.defaultColor;
+      const textStyle = getTextStyle(line.textStyle);
+
+      // 文字デザイン（格子柄・スキャンライン・グリッチ等）が設定されている場合、
+      // 動きエフェクトが内部で呼ぶ ctx.fillText() を一時的に差し替えて、文字デザインの描き方を適用する。
+      // 動きエフェクト側のコードは一切変更せずに、見た目の質感だけを別レイヤーとして重ねられる仕組み。
+      let restoreFillText = null;
+      if (textStyle) {
+        const originalFillText = ctx.fillText.bind(ctx);
+        const textStyleParams = line.textStyleParams || {};
+        ctx.fillText = (text, px, py) => {
+          try {
+            textStyle.fillText(ctx, text, px, py, ctx.fillStyle, t, textStyleParams, fontSize);
+          } catch (e) {
+            console.error('文字デザイン描画エラー:', line.textStyle, e);
+            originalFillText(text, px, py); // 失敗時は通常描画にフォールバック
+          }
+        };
+        restoreFillText = () => { ctx.fillText = originalFillText; };
+      }
 
       try {
         effect.draw(ctx, {
@@ -204,6 +224,8 @@ export class LyricRenderer {
         });
       } catch (e) {
         console.error('エフェクト描画エラー:', line.effect, e);
+      } finally {
+        if (restoreFillText) restoreFillText();
       }
     }
   }

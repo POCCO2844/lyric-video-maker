@@ -100,6 +100,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
       effectParams: {},
       font: null, fontSize: null, color: null,
       x: 0.5, y: 0.5,
+      textStyle: 'none', textStyleParams: {},
     };
     updateProject(p => ({ ...p, lyrics: [...p.lyrics, newLine] }));
     setSelectedLineId(newLine.id);

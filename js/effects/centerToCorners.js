@@ -4,9 +4,9 @@ import { ease, clamp, toChars, measureChars, setTextStyle, strSeed, mulberry32, 
 
 registerEffect({
   id: 'center-to-corners',
-  label: '中央表示→四隅に分解',
+  label: '指定位置で表示→四隅に分解',
   params: [
-    { key: 'holdRatio', label: '中央で静止する割合', type: 'range', min: 0.1, max: 0.8, step: 0.05, default: 0.4 },
+    { key: 'holdRatio', label: '指定位置で静止する割合', type: 'range', min: 0.1, max: 0.8, step: 0.05, default: 0.4 },
     { key: 'scatterRatio', label: '飛散にかける割合', type: 'range', min: 0.1, max: 0.6, step: 0.05, default: 0.35 },
   ],
   draw(ctx, p) {
