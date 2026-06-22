@@ -119,7 +119,16 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
 
   return (
     <div className="preview-wrap">
-      <div className="preview-canvas-box" style={{ aspectRatio: `${aspect}`, width: aspect >= 1 ? '90%' : 'auto', height: aspect < 1 ? '85%' : 'auto' }}>
+      <div
+        className="preview-canvas-box"
+        style={{
+          aspectRatio: `${aspect}`,
+          // 親コンテナ内に収まるよう、幅・高さを両方constrain する。
+          // max-width/max-heightはCSSに任せ、実際のwidthはaspect-ratioに合わせて自動計算させる。
+          width: '100%',
+          maxWidth: `min(100%, ${aspect * 85}vh)`,
+        }}
+      >
         <canvas ref={canvasRef} />
       </div>
       <div className="transport">
