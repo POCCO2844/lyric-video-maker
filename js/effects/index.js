@@ -11,5 +11,7 @@ import './centerToCorners.js';
 import './flyInFromAllDirections.js';
 import './circleRotate.js';
 import './rectanglePatrol.js';
+import './charSliceAssemble.js';
+import './matrixReveal.js';
 
 export { registerEffect, getEffect, listEffects } from './registry.js';

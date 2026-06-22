@@ -232,8 +232,9 @@ export class LyricRenderer {
         }
 
         // オフスクリーンCanvasの文字ピクセルに文字デザインを適用する
+        // 第8引数にビデオ要素を渡す（動画テクスチャ文字デザインが使用する）
         try {
-          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color);
+          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, this._bgVideoEl || null);
         } catch (e) {
           console.error('文字デザイン適用エラー:', line.textStyle, e);
         }

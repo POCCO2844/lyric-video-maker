@@ -4,5 +4,7 @@
 import './gridPattern.js';
 import './scanlines.js';
 import './glitch.js';
+import './dotPattern.js';
+import './videoTexture.js';
 
 export { registerTextStyle, getTextStyle, listTextStyles } from '../textStyleRegistry.js';
