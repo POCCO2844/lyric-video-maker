@@ -11,6 +11,8 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
   const playStartRef = useRef(0);
   const playStartTimeRef = useRef(0);
   const rafRef = useRef(null);
+  const wrapRef = useRef(null);
+  const [wrapSize, setWrapSize] = useState({ w: 800, h: 460 });
 
   // 背景動画があり、かつループOFFの場合はその長さを上限にする。
   // 背景動画の長さ取得は非同期（メタデータ読み込み待ち）なので state で保持する。
@@ -20,6 +22,19 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
     settings: project.settings,
     bgVideoDuration: null,
   }));
+
+  // プレビュー領域のサイズ変化を監視し、キャンバスのサイズ計算に使う
+  useEffect(() => {
+    if (!wrapRef.current) return;
+    const obs = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setWrapSize({ w: width, h: height });
+      }
+    });
+    obs.observe(wrapRef.current);
+    return () => obs.disconnect();
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,17 +132,19 @@ export function Preview({ project, audioBuffer, currentTime, setCurrentTime, isP
 
   const aspect = project.settings.width / project.settings.height;
 
+  // プレビュー領域の実際のサイズ（wrapSizeで追跡）から、アスペクト比を保ったサイズを計算する。
+  // transport（再生コントロール）分として80pxを引いた高さを最大値とする。
+  const maxH = Math.max(wrapSize.h - 80, 100);
+  const maxW = Math.max(wrapSize.w - 32, 100); // padding分を引く
+  const byHeight = maxH * aspect;
+  const previewW = Math.round(Math.min(byHeight, maxW));
+  const previewH = Math.round(previewW / aspect);
+
   return (
-    <div className="preview-wrap">
+    <div className="preview-wrap" ref={wrapRef}>
       <div
         className="preview-canvas-box"
-        style={{
-          aspectRatio: `${aspect}`,
-          // 親コンテナ内に収まるよう、幅・高さを両方constrain する。
-          // max-width/max-heightはCSSに任せ、実際のwidthはaspect-ratioに合わせて自動計算させる。
-          width: '100%',
-          maxWidth: `min(100%, ${aspect * 85}vh)`,
-        }}
+        style={{ width: previewW, height: previewH }}
       >
         <canvas ref={canvasRef} />
       </div>
