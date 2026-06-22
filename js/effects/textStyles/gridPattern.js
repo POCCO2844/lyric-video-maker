@@ -1,4 +1,5 @@
 // effects/textStyles/gridPattern.js — 文字デザイン：格子柄（グリッドパターン）
+// オフスクリーンCanvas上の文字ピクセルだけに格子模様を重ねる。背景にははみ出さない。
 import { registerTextStyle } from '../textStyleRegistry.js';
 
 registerTextStyle({
@@ -10,42 +11,29 @@ registerTextStyle({
     { key: 'gridColor', label: '格子の色', type: 'color', default: '#000000' },
     { key: 'scrollSpeed', label: '格子が流れる速さ(px/秒)', type: 'range', min: 0, max: 200, step: 5, default: 0 },
   ],
-  // ctx には呼び出し側で save() 済み・フォント設定済み・textAlign=center, textBaseline=middle が設定されている前提。
-  fillText(ctx, text, px, py, baseColor, t, params, fontSize) {
+  applyToCanvas(offCtx, w, h, t, params) {
     const gridSize = params.gridSize ?? 14;
     const lineWidth = params.lineWidth ?? 1.5;
     const gridColor = params.gridColor ?? '#000000';
     const scrollSpeed = params.scrollSpeed ?? 0;
     const scrollOffset = (t * scrollSpeed) % gridSize;
 
-    const metrics = ctx.measureText(text);
-    const textW = metrics.width;
-    const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.8;
-    const descent = metrics.actualBoundingBoxDescent || fontSize * 0.3;
-    const boxLeft = px - textW / 2 - lineWidth;
-    const boxTop = py - ascent - lineWidth;
-    const boxW = textW + lineWidth * 2;
-    const boxH = ascent + descent + lineWidth * 2;
-
-    // 1. 文字本体（下地・マスクの土台）
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = baseColor;
-    ctx.fillText(text, px, py);
-
-    // 2. 文字が描かれた領域だけに格子を合成する
-    ctx.globalCompositeOperation = 'source-atop';
-    ctx.strokeStyle = gridColor;
-    ctx.lineWidth = lineWidth;
-    ctx.beginPath();
-    for (let gx = boxLeft - scrollOffset; gx <= boxLeft + boxW + gridSize; gx += gridSize) {
-      ctx.moveTo(gx, boxTop);
-      ctx.lineTo(gx, boxTop + boxH);
+    // source-atop: オフスクリーンCanvasの「既に描かれたピクセル（文字）の上だけ」に格子を重ねる。
+    // 透明なピクセル（背景）には一切描かれないため、背景へのはみ出しが原理的に起きない。
+    offCtx.save();
+    offCtx.globalCompositeOperation = 'source-atop';
+    offCtx.strokeStyle = gridColor;
+    offCtx.lineWidth = lineWidth;
+    offCtx.beginPath();
+    for (let gx = -scrollOffset; gx <= w + gridSize; gx += gridSize) {
+      offCtx.moveTo(gx, 0);
+      offCtx.lineTo(gx, h);
     }
-    for (let gy = boxTop - scrollOffset; gy <= boxTop + boxH + gridSize; gy += gridSize) {
-      ctx.moveTo(boxLeft, gy);
-      ctx.lineTo(boxLeft + boxW, gy);
+    for (let gy = -scrollOffset; gy <= h + gridSize; gy += gridSize) {
+      offCtx.moveTo(0, gy);
+      offCtx.lineTo(w, gy);
     }
-    ctx.stroke();
-    ctx.globalCompositeOperation = 'source-over';
+    offCtx.stroke();
+    offCtx.restore();
   },
 });

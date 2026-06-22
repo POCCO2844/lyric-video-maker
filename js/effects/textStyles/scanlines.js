@@ -11,38 +11,22 @@ registerTextStyle({
     { key: 'lineColor', label: '線の色', type: 'color', default: '#000000' },
     { key: 'scrollSpeed', label: '走査線が流れる速さ(px/秒)', type: 'range', min: -200, max: 200, step: 5, default: 40 },
   ],
-  fillText(ctx, text, px, py, baseColor, t, params, fontSize) {
+  applyToCanvas(offCtx, w, h, t, params) {
     const lineSpacing = params.lineSpacing ?? 5;
     const lineThickness = params.lineThickness ?? 2;
     const lineOpacity = params.lineOpacity ?? 0.55;
     const lineColor = params.lineColor ?? '#000000';
     const scrollSpeed = params.scrollSpeed ?? 40;
     const scrollOffset = t * scrollSpeed;
-
-    const metrics = ctx.measureText(text);
-    const textW = metrics.width;
-    const ascent = metrics.actualBoundingBoxAscent || fontSize * 0.8;
-    const descent = metrics.actualBoundingBoxDescent || fontSize * 0.3;
-    const boxLeft = px - textW / 2 - 4;
-    const boxTop = py - ascent - 4;
-    const boxW = textW + 8;
-    const boxH = ascent + descent + 8;
-
-    // 1. 文字本体
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.fillStyle = baseColor;
-    ctx.fillText(text, px, py);
-
-    // 2. 文字の内側だけに水平スキャンラインを合成する
-    ctx.globalCompositeOperation = 'source-atop';
-    const prevAlpha = ctx.globalAlpha;
-    ctx.fillStyle = lineColor;
-    ctx.globalAlpha = prevAlpha * lineOpacity;
     const normalizedOffset = ((scrollOffset % lineSpacing) + lineSpacing) % lineSpacing;
-    for (let gy = boxTop - normalizedOffset; gy <= boxTop + boxH; gy += lineSpacing) {
-      ctx.fillRect(boxLeft, gy, boxW, lineThickness);
+
+    offCtx.save();
+    offCtx.globalCompositeOperation = 'source-atop';
+    offCtx.fillStyle = lineColor;
+    offCtx.globalAlpha = lineOpacity;
+    for (let gy = -normalizedOffset; gy <= h; gy += lineSpacing) {
+      offCtx.fillRect(0, gy, w, lineThickness);
     }
-    ctx.globalAlpha = prevAlpha;
-    ctx.globalCompositeOperation = 'source-over';
+    offCtx.restore();
   },
 });

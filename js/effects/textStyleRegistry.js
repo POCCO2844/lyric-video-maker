@@ -10,12 +10,15 @@ const textStyles = new Map();
  * @param {string} def.id - 一意のID
  * @param {string} def.label - UI表示名
  * @param {Array}  def.params - [{key,label,type,default,...}]
- * @param {Function} def.fillText - (ctx, text, px, py, baseColor, t, params) => void
- *        通常の ctx.fillText(text, px, py) の代わりに呼ばれる、文字を実際に描く関数。
- *        t は 0〜1 ではなく「経過秒数」（アニメーションに使う）。
+ * @param {Function} def.applyToCanvas
+ *        (offCtx, w, h, t, params, fontSize, baseColor) => void
+ *        動きエフェクトが描き終えたオフスクリーンCanvas（文字のみ、背景なし・透明）に対して
+ *        文字デザインを適用する関数。
+ *        「文字ピクセルの内側だけにパターンを重ねる」には source-atop を使う。
+ *        t は経過秒数（アニメーションに使う）。
  */
 export function registerTextStyle(def) {
-  if (!def.id || !def.fillText) throw new Error('textStyle には id と fillText が必要です');
+  if (!def.id || !def.applyToCanvas) throw new Error('textStyle には id と applyToCanvas が必要です');
   textStyles.set(def.id, def);
 }
 

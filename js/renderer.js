@@ -190,42 +190,56 @@ export class LyricRenderer {
       const color = line.color || settings.defaultColor;
       const textStyle = getTextStyle(line.textStyle);
 
-      // 文字デザイン（格子柄・スキャンライン・グリッチ等）が設定されている場合、
-      // 動きエフェクトが内部で呼ぶ ctx.fillText() を一時的に差し替えて、文字デザインの描き方を適用する。
-      // 動きエフェクト側のコードは一切変更せずに、見た目の質感だけを別レイヤーとして重ねられる仕組み。
-      let restoreFillText = null;
-      if (textStyle) {
-        const originalFillText = ctx.fillText.bind(ctx);
-        const textStyleParams = line.textStyleParams || {};
-        ctx.fillText = (text, px, py) => {
-          try {
-            textStyle.fillText(ctx, text, px, py, ctx.fillStyle, t, textStyleParams, fontSize);
-          } catch (e) {
-            console.error('文字デザイン描画エラー:', line.textStyle, e);
-            originalFillText(text, px, py); // 失敗時は通常描画にフォールバック
-          }
-        };
-        restoreFillText = () => { ctx.fillText = originalFillText; };
-      }
+      if (!textStyle) {
+        // 文字デザインなし：通常通り本体Canvasに直接描画する
+        try {
+          effect.draw(ctx, {
+            text: line.text, progress, duration,
+            canvasW: canvas.width, canvasH: canvas.height,
+            x: line.x ?? 0.5, y: line.y ?? 0.5,
+            font, fontSize, color,
+            params: line.effectParams || {},
+          });
+        } catch (e) {
+          console.error('エフェクト描画エラー:', line.effect, e);
+        }
+      } else {
+        // 文字デザインあり：
+        //   1. まずオフスクリーンCanvasに動きエフェクトを描く（背景が一切入らない透明な状態で）
+        //   2. そのCanvasに文字デザインを適用する
+        //   3. 最後に本体Canvasに合成する
+        // この方式により「背景にはみ出す」「無限再帰」の両方を回避できる。
+        const offscreen = document.createElement('canvas');
+        offscreen.width = canvas.width;
+        offscreen.height = canvas.height;
+        const offCtx = offscreen.getContext('2d');
 
-      try {
-        effect.draw(ctx, {
-          text: line.text,
-          progress,
-          duration,
-          canvasW: canvas.width,
-          canvasH: canvas.height,
-          x: line.x ?? 0.5,
-          y: line.y ?? 0.5,
-          font,
-          fontSize,
-          color,
-          params: line.effectParams || {},
-        });
-      } catch (e) {
-        console.error('エフェクト描画エラー:', line.effect, e);
-      } finally {
-        if (restoreFillText) restoreFillText();
+        try {
+          effect.draw(offCtx, {
+            text: line.text, progress, duration,
+            canvasW: canvas.width, canvasH: canvas.height,
+            x: line.x ?? 0.5, y: line.y ?? 0.5,
+            font, fontSize, color,
+            params: line.effectParams || {},
+          });
+        } catch (e) {
+          console.error('エフェクト描画エラー（オフスクリーン）:', line.effect, e);
+          // フォールバック：通常描画
+          ctx.save();
+          try { effect.draw(ctx, { text: line.text, progress, duration, canvasW: canvas.width, canvasH: canvas.height, x: line.x ?? 0.5, y: line.y ?? 0.5, font, fontSize, color, params: line.effectParams || {} }); } catch (_) {}
+          ctx.restore();
+          continue;
+        }
+
+        // オフスクリーンCanvasの文字ピクセルに文字デザインを適用する
+        try {
+          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color);
+        } catch (e) {
+          console.error('文字デザイン適用エラー:', line.textStyle, e);
+        }
+
+        // 本体Canvasにオフスクリーンを合成する
+        ctx.drawImage(offscreen, 0, 0);
       }
     }
   }
