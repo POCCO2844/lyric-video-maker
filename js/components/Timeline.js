@@ -1,5 +1,5 @@
 // components/Timeline.js
-const { useRef, useState, useMemo } = React;
+const { useRef, useState, useMemo, useEffect } = React;
 import { fmtTime, clamp } from '../uiUtils.js';
 import { uid } from '../lyricsParser.js';
 
@@ -9,14 +9,31 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
   const [pxPerSec, setPxPerSec] = useState(60);
   const scrollRef = useRef(null);
   const dragState = useRef(null);
-  const justDraggedRef = useRef(false);
+
+  // 複数選択のためのID集合（Setをstateで管理する代わりにRefで持ち、強制再描画は別stateで行う）
+  const selectedIdsRef = useRef(new Set(selectedLineId ? [selectedLineId] : []));
+  const [, forceUpdate] = useState(0);
+  const rerender = () => forceUpdate(n => n + 1);
+
+  // 外部（右パネルの削除ボタン等）からselectedLineIdが変わった場合に同期する
+  useEffect(() => {
+    if (!selectedLineId) {
+      selectedIdsRef.current = new Set();
+    } else if (!selectedIdsRef.current.has(selectedLineId)) {
+      selectedIdsRef.current = new Set([selectedLineId]);
+    }
+    rerender();
+  }, [selectedLineId]);
+
+  // ラバーバンド選択用のstate
+  const [rubberBand, setRubberBand] = useState(null); // { startX, startY, curX, curY }
+  const rubberBandRef = useRef(null);
 
   const totalWidth = Math.max(duration * pxPerSec + 200, 800);
 
-  // 行を縦に並べる（重なっている行は別の行に振り分ける）
   const rows = useMemo(() => {
     const sorted = [...project.lyrics].sort((a, b) => a.start - b.start);
-    const lanes = []; // 各レーンの最後のend
+    const lanes = [];
     const placed = [];
     for (const line of sorted) {
       let laneIdx = lanes.findIndex(end => end <= line.start + 0.001);
@@ -31,20 +48,53 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
   function timeToX(t) { return t * pxPerSec; }
   function xToTime(x) { return clamp(x / pxPerSec, 0, duration); }
 
-  function patchLineById(id, patch) {
+  // 複数行をまとめてパッチする
+  function patchLinesByIds(ids, patchFn) {
     updateProject(p => ({
       ...p,
-      lyrics: p.lyrics.map(l => l.id === id ? { ...l, ...patch } : l),
+      lyrics: p.lyrics.map(l => ids.has(l.id) ? { ...l, ...patchFn(l) } : l),
     }));
   }
 
   function onBlockMouseDown(e, line, mode) {
     e.stopPropagation();
-    setSelectedLineId(line.id);
+
+    const isShift = e.shiftKey || e.metaKey || e.ctrlKey;
+    let nextIds;
+
+    if (mode !== 'move') {
+      // リサイズハンドルは常に単一選択で操作する
+      nextIds = new Set([line.id]);
+    } else if (isShift) {
+      // Shift/Cmd/Ctrl+クリック：追加選択 or 選択解除
+      nextIds = new Set(selectedIdsRef.current);
+      if (nextIds.has(line.id)) {
+        nextIds.delete(line.id);
+      } else {
+        nextIds.add(line.id);
+      }
+    } else if (selectedIdsRef.current.has(line.id) && selectedIdsRef.current.size > 1) {
+      // 既に複数選択中の行をクリック：選択は維持してドラッグ開始
+      nextIds = selectedIdsRef.current;
+    } else {
+      // 通常クリック：単体選択に切り替え
+      nextIds = new Set([line.id]);
+    }
+
+    selectedIdsRef.current = nextIds;
+    // 右パネル表示用に「最後にクリックした行」を通知する
+    setSelectedLineId(nextIds.has(line.id) ? line.id : (nextIds.size > 0 ? [...nextIds][0] : null));
+    rerender();
+
+    // ドラッグ開始のスナップショット（選択中の全行の元のstart/end）
+    const origPositions = {};
+    for (const id of nextIds) {
+      const l = project.lyrics.find(l => l.id === id);
+      if (l) origPositions[id] = { start: l.start, end: l.end };
+    }
+
     const startX = e.clientX;
-    const origStart = line.start;
-    const origEnd = line.end;
-    dragState.current = { mode, id: line.id, startX, origStart, origEnd, moved: false };
+    dragState.current = { mode, id: line.id, startX, origPositions, ids: new Set(nextIds), moved: false };
     window.addEventListener('mousemove', onDragMove);
     window.addEventListener('mouseup', onDragUp);
   }
@@ -55,39 +105,97 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
     const dx = e.clientX - ds.startX;
     if (Math.abs(dx) > 2) ds.moved = true;
     const dt = dx / pxPerSec;
+
     if (ds.mode === 'move') {
-      const len = ds.origEnd - ds.origStart;
-      let newStart = clamp(ds.origStart + dt, 0, duration - len);
-      patchLineById(ds.id, { start: newStart, end: newStart + len });
+      // 複数行をまとめて移動：各行の元の位置にdtを加算する
+      updateProject(p => ({
+        ...p,
+        lyrics: p.lyrics.map(l => {
+          if (!ds.ids.has(l.id)) return l;
+          const orig = ds.origPositions[l.id];
+          if (!orig) return l;
+          const len = orig.end - orig.start;
+          const newStart = clamp(orig.start + dt, 0, duration - len);
+          return { ...l, start: newStart, end: newStart + len };
+        }),
+      }));
     } else if (ds.mode === 'l') {
-      let newStart = clamp(ds.origStart + dt, 0, ds.origEnd - 0.1);
-      patchLineById(ds.id, { start: newStart });
+      const orig = ds.origPositions[ds.id];
+      if (orig) updateProject(p => ({ ...p, lyrics: p.lyrics.map(l => l.id === ds.id ? { ...l, start: clamp(orig.start + dt, 0, orig.end - 0.1) } : l) }));
     } else if (ds.mode === 'r') {
-      let newEnd = clamp(ds.origEnd + dt, ds.origStart + 0.1, duration);
-      patchLineById(ds.id, { end: newEnd });
+      const orig = ds.origPositions[ds.id];
+      if (orig) updateProject(p => ({ ...p, lyrics: p.lyrics.map(l => l.id === ds.id ? { ...l, end: clamp(orig.end + dt, orig.start + 0.1, duration) } : l) }));
     }
   }
 
   function onDragUp() {
-    // ドラッグ直後に発火する親要素の click イベントで選択解除されないよう、
-    // 1フレーム分だけ「ドラッグ直後フラグ」を立てておく
-    if (dragState.current) {
-      justDraggedRef.current = true;
-      setTimeout(() => { justDraggedRef.current = false; }, 0);
-    }
     dragState.current = null;
     window.removeEventListener('mousemove', onDragMove);
     window.removeEventListener('mouseup', onDragUp);
   }
 
   function onRulerClick(e) {
-    // スクロールコンテナ自体を基準に計算する（sticky要素のgetBoundingClientRectに依存しない）。
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
     const containerRect = scrollEl.getBoundingClientRect();
     const x = (e.clientX - containerRect.left) + scrollEl.scrollLeft;
     setIsPlaying(false);
     setCurrentTime(xToTime(x));
+  }
+
+  // ラバーバンド選択（背景をドラッグ）
+  function onLinesMouseDown(e) {
+    if (e.target !== e.currentTarget) return; // 背景のみ
+    const scrollEl = scrollRef.current;
+    if (!scrollEl) return;
+    const containerRect = scrollEl.getBoundingClientRect();
+    const startX = (e.clientX - containerRect.left) + scrollEl.scrollLeft;
+    const startY = e.clientY - containerRect.top + scrollEl.scrollTop - 22; // ruler分を引く
+
+    rubberBandRef.current = { startX, startY, curX: startX, curY: startY };
+    setRubberBand({ ...rubberBandRef.current });
+
+    function onMove(e2) {
+      const curX = (e2.clientX - containerRect.left) + scrollEl.scrollLeft;
+      const curY = e2.clientY - containerRect.top + scrollEl.scrollTop - 22;
+      rubberBandRef.current = { ...rubberBandRef.current, curX, curY };
+      setRubberBand({ ...rubberBandRef.current });
+    }
+    function onUp() {
+      // ラバーバンドの矩形内に含まれる行を選択する
+      const rb = rubberBandRef.current;
+      if (rb) {
+        const rbLeft = Math.min(rb.startX, rb.curX);
+        const rbRight = Math.max(rb.startX, rb.curX);
+        const rbTop = Math.min(rb.startY, rb.curY);
+        const rbBottom = Math.max(rb.startY, rb.curY);
+        const hitIds = new Set();
+        for (const line of rows.placed) {
+          const blockLeft = timeToX(line.start);
+          const blockRight = timeToX(line.end);
+          const blockTop = line.lane * ROW_H;
+          const blockBottom = blockTop + ROW_H;
+          if (blockLeft < rbRight && blockRight > rbLeft && blockTop < rbBottom && blockBottom > rbTop) {
+            hitIds.add(line.id);
+          }
+        }
+        if (hitIds.size > 0) {
+          selectedIdsRef.current = hitIds;
+          setSelectedLineId([...hitIds][0]);
+          rerender();
+        } else {
+          selectedIdsRef.current = new Set();
+          setSelectedLineId(null);
+          rerender();
+        }
+      }
+      setRubberBand(null);
+      rubberBandRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   }
 
   function addLineAtPlayhead() {
@@ -104,26 +212,40 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
     };
     updateProject(p => ({ ...p, lyrics: [...p.lyrics, newLine] }));
     setSelectedLineId(newLine.id);
+    selectedIdsRef.current = new Set([newLine.id]);
+    rerender();
   }
 
   function deleteSelected() {
-    if (!selectedLineId) return;
-    updateProject(p => ({ ...p, lyrics: p.lyrics.filter(l => l.id !== selectedLineId) }));
+    const ids = selectedIdsRef.current;
+    if (!ids.size) return;
+    updateProject(p => ({ ...p, lyrics: p.lyrics.filter(l => !ids.has(l.id)) }));
+    selectedIdsRef.current = new Set();
     setSelectedLineId(null);
+    rerender();
   }
 
-  // 目盛り生成
   const ticks = [];
   const tickStep = pxPerSec >= 80 ? 1 : pxPerSec >= 30 ? 5 : 10;
   for (let t = 0; t <= duration; t += tickStep) {
     ticks.push(t);
   }
 
+  const selectedIds = selectedIdsRef.current;
+  const selectedCount = selectedIds.size;
+
   return (
     <div className="timeline-wrap">
       <div className="timeline-toolbar">
         <button className="btn small" onClick={addLineAtPlayhead}>+ 現在位置に行を追加</button>
-        <button className="btn small danger" onClick={deleteSelected} disabled={!selectedLineId}>選択行を削除</button>
+        <button className="btn small danger" onClick={deleteSelected} disabled={!selectedCount}>
+          {selectedCount > 1 ? `選択行を削除 (${selectedCount}件)` : '選択行を削除'}
+        </button>
+        {selectedCount > 1 && (
+          <span style={{ fontSize: 12, color: 'var(--accent)', marginLeft: 4 }}>
+            {selectedCount}件選択中 — Shiftクリックで追加選択、ドラッグでまとめて移動
+          </span>
+        )}
         <div className="zoom">
           ズーム
           <input type="range" min={20} max={200} value={pxPerSec} onChange={(e) => setPxPerSec(Number(e.target.value))} style={{ width: 100 }} />
@@ -138,14 +260,8 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
           </div>
           <div
             className="timeline-lines"
-            style={{ height: rows.laneCount * ROW_H, width: totalWidth }}
-            onClick={(e) => {
-              // 背景（行・レーン自体）がクリックされた場合のみ選択解除する。
-              // 歌詞ブロックやそのハンドルがクリックされた場合は currentTarget 自身ではないので除外。
-              if (e.target === e.currentTarget) {
-                setSelectedLineId(null);
-              }
-            }}
+            style={{ height: rows.laneCount * ROW_H, width: totalWidth, position: 'relative' }}
+            onMouseDown={onLinesMouseDown}
           >
             {Array.from({ length: rows.laneCount }).map((_, i) => (
               <div key={i} className="timeline-row" />
@@ -153,7 +269,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
             {rows.placed.map(line => (
               <div
                 key={line.id}
-                className={`lyric-block ${selectedLineId === line.id ? 'selected' : ''}`}
+                className={`lyric-block ${selectedIds.has(line.id) ? 'selected' : ''}`}
                 style={{
                   left: timeToX(line.start),
                   width: Math.max(timeToX(line.end - line.start), 10),
@@ -163,14 +279,33 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
                 onClick={(e) => e.stopPropagation()}
                 title={line.text}
               >
-                <div className="handle l" onMouseDown={(e) => onBlockMouseDown(e, line, 'l')} />
+                <div className="handle l" onMouseDown={(e) => { e.stopPropagation(); onBlockMouseDown(e, line, 'l'); }} />
                 {line.text}
-                <div className="handle r" onMouseDown={(e) => onBlockMouseDown(e, line, 'r')} />
+                <div className="handle r" onMouseDown={(e) => { e.stopPropagation(); onBlockMouseDown(e, line, 'r'); }} />
               </div>
             ))}
+            {rubberBand && (() => {
+              const rb = rubberBand;
+              const left = Math.min(rb.startX, rb.curX);
+              const top = Math.min(rb.startY, rb.curY);
+              const width = Math.abs(rb.curX - rb.startX);
+              const height = Math.abs(rb.curY - rb.startY);
+              return (
+                <div style={{
+                  position: 'absolute', pointerEvents: 'none', zIndex: 20,
+                  left, top, width, height,
+                  border: '1.5px solid var(--accent)',
+                  background: 'rgba(110,231,183,0.12)',
+                  borderRadius: 3,
+                }} />
+              );
+            })()}
             <div className="playhead" style={{ left: timeToX(currentTime), height: rows.laneCount * ROW_H }} />
           </div>
         </div>
+      </div>
+      <div style={{ fontSize: 11, color: 'var(--ink-2)', padding: '4px 12px' }}>
+        Shift/Cmd+クリックで追加選択 ／ 背景エリアをドラッグで範囲選択
       </div>
     </div>
   );
