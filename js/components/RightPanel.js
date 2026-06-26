@@ -213,6 +213,50 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
           {textStyleDef.params.map(param => renderParamField(param, line.textStyleParams || {}, patchTextStyleParams))}
         </div>
       )}
+
+      {line.textStyle === 'video-texture' && (
+        <div className="panel-section">
+          <h2>テキスト用動画ファイル</h2>
+          <div
+            className="dropzone"
+            onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = 'video/*';
+              input.onchange = (e) => {
+                const file = e.target.files?.[0];
+                if (file) patchLine({ textStyleVideoBlob: file, textStyleVideoName: file.name });
+              };
+              input.click();
+            }}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              const file = e.dataTransfer.files?.[0];
+              if (file && file.type.startsWith('video/')) {
+                patchLine({ textStyleVideoBlob: file, textStyleVideoName: file.name });
+              }
+            }}
+          >
+            クリックまたはドラッグ＆ドロップで動画を読み込み
+            {line.textStyleVideoName && <div className="fname">🎬 {line.textStyleVideoName}</div>}
+            {!line.textStyleVideoName && (
+              <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 4 }}>
+                動画を設定しない場合は、プロジェクトの背景動画が使用されます
+              </div>
+            )}
+          </div>
+          {line.textStyleVideoName && (
+            <button
+              className="btn small ghost danger"
+              style={{ marginTop: 6 }}
+              onClick={() => patchLine({ textStyleVideoBlob: null, textStyleVideoName: '' })}
+            >
+              動画を削除（背景動画で代用）
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

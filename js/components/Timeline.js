@@ -145,24 +145,30 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
 
   // ラバーバンド選択（背景をドラッグ）
   function onLinesMouseDown(e) {
-    if (e.target !== e.currentTarget) return; // 背景のみ
+    // 歌詞ブロック・ハンドル以外（背景・レーン行）からのドラッグを受け付ける
+    const tgt = e.target;
+    const isBlock = tgt.classList.contains('lyric-block') || tgt.classList.contains('handle');
+    if (isBlock) return;
+
     const scrollEl = scrollRef.current;
     if (!scrollEl) return;
     const containerRect = scrollEl.getBoundingClientRect();
+    const RULER_H = 22;
+
+    // スクロールコンテナ内の絶対座標で計算する
     const startX = (e.clientX - containerRect.left) + scrollEl.scrollLeft;
-    const startY = e.clientY - containerRect.top + scrollEl.scrollTop - 22; // ruler分を引く
+    const startY = (e.clientY - containerRect.top) + scrollEl.scrollTop - RULER_H;
 
     rubberBandRef.current = { startX, startY, curX: startX, curY: startY };
     setRubberBand({ ...rubberBandRef.current });
 
     function onMove(e2) {
       const curX = (e2.clientX - containerRect.left) + scrollEl.scrollLeft;
-      const curY = e2.clientY - containerRect.top + scrollEl.scrollTop - 22;
+      const curY = (e2.clientY - containerRect.top) + scrollEl.scrollTop - RULER_H;
       rubberBandRef.current = { ...rubberBandRef.current, curX, curY };
       setRubberBand({ ...rubberBandRef.current });
     }
     function onUp() {
-      // ラバーバンドの矩形内に含まれる行を選択する
       const rb = rubberBandRef.current;
       if (rb) {
         const rbLeft = Math.min(rb.startX, rb.curX);
@@ -170,13 +176,16 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
         const rbTop = Math.min(rb.startY, rb.curY);
         const rbBottom = Math.max(rb.startY, rb.curY);
         const hitIds = new Set();
-        for (const line of rows.placed) {
-          const blockLeft = timeToX(line.start);
-          const blockRight = timeToX(line.end);
-          const blockTop = line.lane * ROW_H;
-          const blockBottom = blockTop + ROW_H;
-          if (blockLeft < rbRight && blockRight > rbLeft && blockTop < rbBottom && blockBottom > rbTop) {
-            hitIds.add(line.id);
+        // 最小限の移動（ほぼクリック）の場合はラバーバンド選択しない
+        if (Math.abs(rb.curX - rb.startX) > 5 || Math.abs(rb.curY - rb.startY) > 5) {
+          for (const line of rows.placed) {
+            const blockLeft = timeToX(line.start);
+            const blockRight = timeToX(line.end);
+            const blockTop = line.lane * ROW_H;
+            const blockBottom = blockTop + ROW_H;
+            if (blockLeft < rbRight && blockRight > rbLeft && blockTop < rbBottom && blockBottom > rbTop) {
+              hitIds.add(line.id);
+            }
           }
         }
         if (hitIds.size > 0) {
@@ -184,6 +193,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
           setSelectedLineId([...hitIds][0]);
           rerender();
         } else {
+          // 単なる背景クリックは選択解除
           selectedIdsRef.current = new Set();
           setSelectedLineId(null);
           rerender();

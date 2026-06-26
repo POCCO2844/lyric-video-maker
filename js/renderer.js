@@ -33,6 +33,9 @@ export class LyricRenderer {
     this._bgVideoEl = null;
     this._bgVideoBlobRef = null;
     this._bgVideoReadyPromise = null;
+
+    // 行ごとのtextStyle用動画要素キャッシュ。key=lineId, value={videoEl, blobRef}
+    this._lineVideoCache = new Map();
   }
 
   setProject(project) {
@@ -232,9 +235,24 @@ export class LyricRenderer {
         }
 
         // オフスクリーンCanvasの文字ピクセルに文字デザインを適用する
-        // 第8引数にビデオ要素を渡す（動画テクスチャ文字デザインが使用する）
+        // 第8引数: 背景動画(プロジェクト設定)またはこの行専用のtextStyle動画を渡す
+        let textStyleVideoEl = null;
+        if (line.textStyleVideoBlob) {
+          const cached = this._lineVideoCache.get(line.id);
+          if (!cached || cached.blobRef !== line.textStyleVideoBlob) {
+            const url = URL.createObjectURL(line.textStyleVideoBlob);
+            const v = document.createElement('video');
+            v.src = url; v.muted = true; v.playsInline = true; v.loop = true;
+            if (cached) URL.revokeObjectURL(cached.videoEl.src);
+            this._lineVideoCache.set(line.id, { videoEl: v, blobRef: line.textStyleVideoBlob });
+            v.load();
+          }
+          textStyleVideoEl = this._lineVideoCache.get(line.id)?.videoEl || null;
+        }
+        // textStyleVideoBlob が無い場合は、プロジェクトの背景動画で代用する
+        const videoForStyle = textStyleVideoEl || this._bgVideoEl || null;
         try {
-          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, this._bgVideoEl || null);
+          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, videoForStyle);
         } catch (e) {
           console.error('文字デザイン適用エラー:', line.textStyle, e);
         }
@@ -249,5 +267,9 @@ export class LyricRenderer {
   dispose() {
     if (this._bgImageEl) URL.revokeObjectURL(this._bgImageEl.src);
     if (this._bgVideoEl) URL.revokeObjectURL(this._bgVideoEl.src);
+    for (const { videoEl } of this._lineVideoCache.values()) {
+      URL.revokeObjectURL(videoEl.src);
+    }
+    this._lineVideoCache.clear();
   }
 }
