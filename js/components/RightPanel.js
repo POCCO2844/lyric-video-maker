@@ -168,6 +168,7 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
             { value: 'horizontal', label: '横書き（デフォルト）' },
             { value: 'vertical', label: '縦書き' },
             { value: 'diagonal', label: '斜め書き' },
+            { value: 'step', label: '段差配置（文字がずれて並ぶ）' },
           ].map(opt => (
             <button
               key={opt.value}
@@ -178,11 +179,28 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
             </button>
           ))}
         </div>
+
+        {/* 縦書きのパラメータ */}
+        {(line.writingMode || 'horizontal') === 'vertical' && (
+          <div className="field" style={{ marginTop: 10 }}>
+            <label>
+              文字間隔(px)
+              <span className="range-val">{line.writingModeParams?.charSpacing ?? 8}</span>
+            </label>
+            <input
+              type="range" min={-20} max={80} step={1}
+              value={line.writingModeParams?.charSpacing ?? 8}
+              onChange={(e) => patchLine({ writingModeParams: { ...line.writingModeParams, charSpacing: Number(e.target.value) } })}
+            />
+          </div>
+        )}
+
+        {/* 斜め書きのパラメータ */}
         {(line.writingMode || 'horizontal') === 'diagonal' && (
           <div className="field" style={{ marginTop: 10 }}>
             <label>
               斜め角度（度）
-              <span className="range-val">{(line.writingModeParams?.angleDeg ?? -30)}°</span>
+              <span className="range-val">{line.writingModeParams?.angleDeg ?? -30}°</span>
             </label>
             <input
               type="range" min={-90} max={90} step={1}
@@ -191,8 +209,37 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
             />
           </div>
         )}
+
+        {/* 段差配置のパラメータ */}
+        {(line.writingMode || 'horizontal') === 'step' && (
+          <div style={{ marginTop: 10 }}>
+            <div className="field">
+              <label>
+                X方向のずれ(px/文字)
+                <span className="range-val">{line.writingModeParams?.stepX ?? 20}</span>
+              </label>
+              <input
+                type="range" min={-100} max={100} step={2}
+                value={line.writingModeParams?.stepX ?? 20}
+                onChange={(e) => patchLine({ writingModeParams: { ...line.writingModeParams, stepX: Number(e.target.value) } })}
+              />
+            </div>
+            <div className="field">
+              <label>
+                Y方向のずれ(px/文字)
+                <span className="range-val">{line.writingModeParams?.stepY ?? 20}</span>
+              </label>
+              <input
+                type="range" min={-80} max={80} step={2}
+                value={line.writingModeParams?.stepY ?? 20}
+                onChange={(e) => patchLine({ writingModeParams: { ...line.writingModeParams, stepY: Number(e.target.value) } })}
+              />
+            </div>
+          </div>
+        )}
+
         <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 6 }}>
-          縦書き・斜め書きは、「表示方法」や「文字デザイン」と組み合わせて使えます。
+          縦書き・斜め書き・段差配置は「表示方法」や「文字デザイン」と組み合わせられます。
         </div>
       </div>
 

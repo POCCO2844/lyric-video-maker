@@ -1,6 +1,7 @@
 // renderer.js — Canvas に現在時刻の歌詞を描画する共通エンジン（プレビューと録画の両方で使う）
 import { getEffect } from './effects/index.js';
 import { getTextStyle } from './effects/textStyles/index.js';
+import { toChars } from './effects/utils.js';
 
 // cover/contain/stretch に応じた描画矩形を計算する
 function computeFitRect(srcW, srcH, dstW, dstH, fit) {
@@ -271,26 +272,100 @@ export class LyricRenderer {
         }
 
         // 書き方（writingMode）に応じて、オフスクリーンの描画結果を変換して本体に合成する。
-        // 行の指定座標（x,y）を中心に回転・変換を行う。
         if (writingMode === 'horizontal') {
           // 横書き（変換なし）
           ctx.drawImage(offscreen, 0, 0);
-        } else {
+        } else if (writingMode === 'vertical') {
+          // 縦書き：オフスクリーンを回転ではなく「文字を1文字ずつ縦に積む」形で再描画する。
+          // offscreen には横書きでのエフェクト結果が入っているが、これを使わず、
+          // 縦書き用の別オフスクリーンに文字を縦配置してから本体に合成する。
+          const vertCanvas = document.createElement('canvas');
+          vertCanvas.width = canvas.width;
+          vertCanvas.height = canvas.height;
+          const vCtx = vertCanvas.getContext('2d');
+
+          // エフェクトのglobalAlpha（フェード状態）をoffscreenから読み取る代わりに、
+          // progressから直接計算する（line-fadeのデフォルト値に準拠）
+          const fi = 0.15, fo = 0.15;
+          let alpha = 1;
+          if (progress < fi) alpha = progress / fi;
+          else if (progress > 1 - fo) alpha = (1 - progress) / fo;
+          alpha = Math.max(0, Math.min(1, alpha));
+
+          const chars = toChars(line.text);
+          const charSpacing = writingModeParams.charSpacing ?? 8;
+          const lineHeight = fontSize + charSpacing;
+          const totalHeight = (chars.length - 1) * lineHeight;
           const cx = (line.x ?? 0.5) * canvas.width;
-          const cy = (line.y ?? 0.5) * canvas.height;
-          let angleRad = 0;
-          if (writingMode === 'vertical') {
-            angleRad = Math.PI / 2; // 90度回転（縦書き）
-          } else if (writingMode === 'diagonal') {
-            const deg = writingModeParams.angleDeg ?? -30;
-            angleRad = deg * Math.PI / 180;
+          const startY = (line.y ?? 0.5) * canvas.height - totalHeight / 2;
+
+          vCtx.font = `${fontSize}px ${font}`;
+          vCtx.textAlign = 'center';
+          vCtx.textBaseline = 'middle';
+          vCtx.fillStyle = color;
+          vCtx.globalAlpha = alpha;
+          chars.forEach((ch, i) => {
+            vCtx.fillText(ch, cx, startY + i * lineHeight);
+          });
+
+          // 文字デザインが指定されている場合はvertCanvasにも適用する
+          if (textStyle) {
+            try {
+              const mediaForStyle = textStyleImageEl || videoForStyle || null;
+              textStyle.applyToCanvas(vCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, mediaForStyle);
+            } catch (e) {
+              console.error('縦書き文字デザイン適用エラー:', line.textStyle, e);
+            }
           }
+          ctx.drawImage(vertCanvas, 0, 0);
+        } else if (writingMode === 'diagonal') {
+          // 斜め：行の指定座標を中心に指定角度で回転して合成
+          const cxD = (line.x ?? 0.5) * canvas.width;
+          const cyD = (line.y ?? 0.5) * canvas.height;
+          const deg = writingModeParams.angleDeg ?? -30;
+          const angleRad = deg * Math.PI / 180;
           ctx.save();
-          ctx.translate(cx, cy);
+          ctx.translate(cxD, cyD);
           ctx.rotate(angleRad);
-          ctx.translate(-cx, -cy);
+          ctx.translate(-cxD, -cyD);
           ctx.drawImage(offscreen, 0, 0);
           ctx.restore();
+        } else if (writingMode === 'step') {
+          // 段差配置：文字を1文字ずつX/Yずらして配置（正立のまま）
+          const stepCanvas = document.createElement('canvas');
+          stepCanvas.width = canvas.width;
+          stepCanvas.height = canvas.height;
+          const sCtx = stepCanvas.getContext('2d');
+
+          const fi2 = 0.12, fo2 = 0.12;
+          let alpha2 = 1;
+          if (progress < fi2) alpha2 = progress / fi2;
+          else if (progress > 1 - fo2) alpha2 = (1 - progress) / fo2;
+          alpha2 = Math.max(0, Math.min(1, alpha2));
+
+          const charsS = toChars(line.text);
+          const stepX = writingModeParams.stepX ?? 20;
+          const stepY = writingModeParams.stepY ?? 20;
+          const totalOffX = (charsS.length - 1) * stepX;
+          const totalOffY = (charsS.length - 1) * stepY;
+          const startXS = (line.x ?? 0.5) * canvas.width - totalOffX / 2;
+          const startYS = (line.y ?? 0.5) * canvas.height - totalOffY / 2;
+
+          sCtx.font = `${fontSize}px ${font}`;
+          sCtx.textAlign = 'center';
+          sCtx.textBaseline = 'middle';
+          sCtx.fillStyle = color;
+          sCtx.globalAlpha = alpha2;
+          charsS.forEach((ch, i) => {
+            sCtx.fillText(ch, startXS + i * stepX, startYS + i * stepY);
+          });
+          if (textStyle) {
+            try {
+              const mediaForStyle = textStyleImageEl || videoForStyle || null;
+              textStyle.applyToCanvas(sCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, mediaForStyle);
+            } catch (e) {}
+          }
+          ctx.drawImage(stepCanvas, 0, 0);
         }
       }
     }
