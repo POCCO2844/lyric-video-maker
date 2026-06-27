@@ -194,9 +194,12 @@ export class LyricRenderer {
       const fontSize = line.fontSize || settings.defaultFontSize;
       const color = line.color || settings.defaultColor;
       const textStyle = getTextStyle(line.textStyle);
+      const writingMode = line.writingMode || 'horizontal';
+      const writingModeParams = line.writingModeParams || {};
+      const needsOffscreen = textStyle || writingMode !== 'horizontal';
 
-      if (!textStyle) {
-        // 文字デザインなし：通常通り本体Canvasに直接描画する
+      if (!needsOffscreen) {
+        // 文字デザインなし・横書き：通常通り本体Canvasに直接描画する
         try {
           effect.draw(ctx, {
             text: line.text, progress, duration,
@@ -209,11 +212,7 @@ export class LyricRenderer {
           console.error('エフェクト描画エラー:', line.effect, e);
         }
       } else {
-        // 文字デザインあり：
-        //   1. まずオフスクリーンCanvasに動きエフェクトを描く（背景が一切入らない透明な状態で）
-        //   2. そのCanvasに文字デザインを適用する
-        //   3. 最後に本体Canvasに合成する
-        // この方式により「背景にはみ出す」「無限再帰」の両方を回避できる。
+        // オフスクリーンCanvasに動きエフェクトを描画する
         const offscreen = document.createElement('canvas');
         offscreen.width = canvas.width;
         offscreen.height = canvas.height;
@@ -229,55 +228,70 @@ export class LyricRenderer {
           });
         } catch (e) {
           console.error('エフェクト描画エラー（オフスクリーン）:', line.effect, e);
-          // フォールバック：通常描画
           ctx.save();
           try { effect.draw(ctx, { text: line.text, progress, duration, canvasW: canvas.width, canvasH: canvas.height, x: line.x ?? 0.5, y: line.y ?? 0.5, font, fontSize, color, params: line.effectParams || {} }); } catch (_) {}
           ctx.restore();
           continue;
         }
 
-        // オフスクリーンCanvasの文字ピクセルに文字デザインを適用する
-        // 第8引数: 背景動画(プロジェクト設定)またはこの行専用のtextStyle動画を渡す
-        let textStyleVideoEl = null;
-        if (line.textStyleVideoBlob) {
-          const cached = this._lineVideoCache.get(line.id);
-          if (!cached || cached.blobRef !== line.textStyleVideoBlob) {
-            if (cached) { cached.videoEl.pause(); URL.revokeObjectURL(cached.videoEl.src); }
-            const url = URL.createObjectURL(line.textStyleVideoBlob);
-            const v = document.createElement('video');
-            v.src = url; v.muted = true; v.playsInline = true; v.loop = true;
-            v.load();
-            v.play().catch(() => {}); // 準備できたら再生開始
-            this._lineVideoCache.set(line.id, { videoEl: v, blobRef: line.textStyleVideoBlob });
+        // 文字デザインをオフスクリーンに適用する
+        if (textStyle) {
+          let textStyleVideoEl = null;
+          if (line.textStyleVideoBlob) {
+            const cached = this._lineVideoCache.get(line.id);
+            if (!cached || cached.blobRef !== line.textStyleVideoBlob) {
+              if (cached) { cached.videoEl.pause(); URL.revokeObjectURL(cached.videoEl.src); }
+              const url = URL.createObjectURL(line.textStyleVideoBlob);
+              const v = document.createElement('video');
+              v.src = url; v.muted = true; v.playsInline = true; v.loop = true;
+              v.load(); v.play().catch(() => {});
+              this._lineVideoCache.set(line.id, { videoEl: v, blobRef: line.textStyleVideoBlob });
+            }
+            textStyleVideoEl = this._lineVideoCache.get(line.id)?.videoEl || null;
           }
-          textStyleVideoEl = this._lineVideoCache.get(line.id)?.videoEl || null;
-        }
-        // textStyleVideoBlob が無い場合は、プロジェクトの背景動画で代用する
-        const videoForStyle = textStyleVideoEl || this._bgVideoEl || null;
-
-        // 行ごとのtextStyle用画像（textStyleImageBlob）を取得する
-        let textStyleImageEl = null;
-        if (line.textStyleImageBlob) {
-          const cachedImg = this._lineImageCache.get(line.id);
-          if (!cachedImg || cachedImg.blobRef !== line.textStyleImageBlob) {
-            if (cachedImg) URL.revokeObjectURL(cachedImg.imgEl.src);
-            const url = URL.createObjectURL(line.textStyleImageBlob);
-            const img = new Image();
-            img.src = url;
-            this._lineImageCache.set(line.id, { imgEl: img, blobRef: line.textStyleImageBlob });
+          const videoForStyle = textStyleVideoEl || this._bgVideoEl || null;
+          let textStyleImageEl = null;
+          if (line.textStyleImageBlob) {
+            const cachedImg = this._lineImageCache.get(line.id);
+            if (!cachedImg || cachedImg.blobRef !== line.textStyleImageBlob) {
+              if (cachedImg) URL.revokeObjectURL(cachedImg.imgEl.src);
+              const url = URL.createObjectURL(line.textStyleImageBlob);
+              const img = new Image();
+              img.src = url;
+              this._lineImageCache.set(line.id, { imgEl: img, blobRef: line.textStyleImageBlob });
+            }
+            textStyleImageEl = this._lineImageCache.get(line.id)?.imgEl || null;
           }
-          textStyleImageEl = this._lineImageCache.get(line.id)?.imgEl || null;
-        }
-        try {
-          // 画像があれば画像を、なければ動画を第8引数として渡す（applyToCanvasのシグネチャを統一）
-          const mediaForStyle = textStyleImageEl || videoForStyle || null;
-          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, mediaForStyle);
-        } catch (e) {
-          console.error('文字デザイン適用エラー:', line.textStyle, e);
+          try {
+            const mediaForStyle = textStyleImageEl || videoForStyle || null;
+            textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, mediaForStyle);
+          } catch (e) {
+            console.error('文字デザイン適用エラー:', line.textStyle, e);
+          }
         }
 
-        // 本体Canvasにオフスクリーンを合成する
-        ctx.drawImage(offscreen, 0, 0);
+        // 書き方（writingMode）に応じて、オフスクリーンの描画結果を変換して本体に合成する。
+        // 行の指定座標（x,y）を中心に回転・変換を行う。
+        if (writingMode === 'horizontal') {
+          // 横書き（変換なし）
+          ctx.drawImage(offscreen, 0, 0);
+        } else {
+          const cx = (line.x ?? 0.5) * canvas.width;
+          const cy = (line.y ?? 0.5) * canvas.height;
+          let angleRad = 0;
+          if (writingMode === 'vertical') {
+            angleRad = Math.PI / 2; // 90度回転（縦書き）
+          } else if (writingMode === 'diagonal') {
+            const deg = writingModeParams.angleDeg ?? -30;
+            angleRad = deg * Math.PI / 180;
+          }
+          ctx.save();
+          ctx.translate(cx, cy);
+          ctx.rotate(angleRad);
+          ctx.translate(-cx, -cy);
+          ctx.drawImage(offscreen, 0, 0);
+          ctx.restore();
+        }
       }
     }
   }

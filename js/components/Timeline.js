@@ -219,6 +219,7 @@ export function Timeline({ project, updateProject, currentTime, setCurrentTime, 
       font: null, fontSize: null, color: null,
       x: 0.5, y: 0.5,
       textStyle: 'none', textStyleParams: {},
+      writingMode: 'horizontal', writingModeParams: {},
     };
     updateProject(p => ({ ...p, lyrics: [...p.lyrics, newLine] }));
     setSelectedLineId(newLine.id);

@@ -43,6 +43,8 @@ export function parseLrc(text) {
     y: 0.5,
     textStyle: 'none',   // 文字デザイン（none/grid/scanlines/glitch等）
     textStyleParams: {},
+    writingMode: 'horizontal', // 文字の書き方: 'horizontal'（横）| 'vertical'（縦）| 'diagonal'（斜め）
+    writingModeParams: {},     // 書き方ごとのパラメータ（角度等）
   }));
 }
 
@@ -62,6 +64,8 @@ export function parsePlainText(text) {
     y: 0.5,
     textStyle: 'none',
     textStyleParams: {},
+    writingMode: 'horizontal',
+    writingModeParams: {},
   }));
 }
 

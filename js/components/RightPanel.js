@@ -162,6 +162,41 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
       </div>
 
       <div className="panel-section">
+        <h2>文字の書き方</h2>
+        <div className="effect-grid">
+          {[
+            { value: 'horizontal', label: '横書き（デフォルト）' },
+            { value: 'vertical', label: '縦書き' },
+            { value: 'diagonal', label: '斜め書き' },
+          ].map(opt => (
+            <button
+              key={opt.value}
+              className={`effect-opt ${(line.writingMode || 'horizontal') === opt.value ? 'active' : ''}`}
+              onClick={() => patchLine({ writingMode: opt.value, writingModeParams: {} })}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {(line.writingMode || 'horizontal') === 'diagonal' && (
+          <div className="field" style={{ marginTop: 10 }}>
+            <label>
+              斜め角度（度）
+              <span className="range-val">{(line.writingModeParams?.angleDeg ?? -30)}°</span>
+            </label>
+            <input
+              type="range" min={-90} max={90} step={1}
+              value={line.writingModeParams?.angleDeg ?? -30}
+              onChange={(e) => patchLine({ writingModeParams: { ...line.writingModeParams, angleDeg: Number(e.target.value) } })}
+            />
+          </div>
+        )}
+        <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 6 }}>
+          縦書き・斜め書きは、「表示方法」や「文字デザイン」と組み合わせて使えます。
+        </div>
+      </div>
+
+      <div className="panel-section">
         <h2>表示方法</h2>
         <div className="effect-grid">
           {effects.map(ef => (
