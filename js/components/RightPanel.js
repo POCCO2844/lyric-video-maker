@@ -216,45 +216,99 @@ export function RightPanel({ project, selectedLineId, updateProject, currentTime
 
       {line.textStyle === 'video-texture' && (
         <div className="panel-section">
-          <h2>テキスト用動画ファイル</h2>
-          <div
-            className="dropzone"
-            onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = 'video/*';
-              input.onchange = (e) => {
-                const file = e.target.files?.[0];
-                if (file) patchLine({ textStyleVideoBlob: file, textStyleVideoName: file.name });
-              };
-              input.click();
-            }}
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              const file = e.dataTransfer.files?.[0];
-              if (file && file.type.startsWith('video/')) {
-                patchLine({ textStyleVideoBlob: file, textStyleVideoName: file.name });
+          <h2>テキスト用メディアファイル</h2>
+
+          {/* 動画アップロード */}
+          <div className="field">
+            <label>動画ファイル（優先使用）</label>
+            <div
+              className="dropzone"
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file'; input.accept = 'video/*';
+                input.onchange = (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) patchLine({ textStyleVideoBlob: file, textStyleVideoName: file.name });
+                };
+                input.click();
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (file && file.type.startsWith('video/')) patchLine({ textStyleVideoBlob: file, textStyleVideoName: file.name });
+              }}
+            >
+              {line.textStyleVideoName
+                ? <div className="fname">🎬 {line.textStyleVideoName}</div>
+                : <>クリックまたはD&Dで動画を読み込み<br/><span style={{fontSize:11,color:'var(--ink-2)'}}>未設定の場合はプロジェクトの背景動画を使用</span></>
               }
-            }}
-          >
-            クリックまたはドラッグ＆ドロップで動画を読み込み
-            {line.textStyleVideoName && <div className="fname">🎬 {line.textStyleVideoName}</div>}
-            {!line.textStyleVideoName && (
-              <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 4 }}>
-                動画を設定しない場合は、プロジェクトの背景動画が使用されます
-              </div>
+            </div>
+            {line.textStyleVideoName && (
+              <button className="btn small ghost" style={{marginTop:4}} onClick={() => patchLine({ textStyleVideoBlob: null, textStyleVideoName: '' })}>動画を削除</button>
             )}
           </div>
-          {line.textStyleVideoName && (
-            <button
-              className="btn small ghost danger"
-              style={{ marginTop: 6 }}
-              onClick={() => patchLine({ textStyleVideoBlob: null, textStyleVideoName: '' })}
-            >
-              動画を削除（背景動画で代用）
-            </button>
+
+          {/* 動画プレビュー */}
+          {line.textStyleVideoBlob && (
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--ink-1)', display: 'block', marginBottom: 4 }}>動画プレビュー（文字に貼られる内容）</label>
+              <video
+                key={line.textStyleVideoName}
+                src={URL.createObjectURL(line.textStyleVideoBlob)}
+                muted autoPlay loop playsInline
+                style={{ width: '100%', maxHeight: 100, objectFit: 'contain', background: '#000', borderRadius: 4 }}
+              />
+            </div>
           )}
+
+          {/* 画像アップロード（動画がない場合に使用） */}
+          <div className="field">
+            <label>画像ファイル（動画がない場合に使用）</label>
+            <div
+              className="dropzone"
+              onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file'; input.accept = 'image/*';
+                input.onchange = (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) patchLine({ textStyleImageBlob: file, textStyleImageName: file.name });
+                };
+                input.click();
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const file = e.dataTransfer.files?.[0];
+                if (file && file.type.startsWith('image/')) patchLine({ textStyleImageBlob: file, textStyleImageName: file.name });
+              }}
+            >
+              {line.textStyleImageName
+                ? <div className="fname">🖼 {line.textStyleImageName}</div>
+                : 'クリックまたはD&Dで画像を読み込み（jpg / png 等）'
+              }
+            </div>
+            {line.textStyleImageName && (
+              <button className="btn small ghost" style={{marginTop:4}} onClick={() => patchLine({ textStyleImageBlob: null, textStyleImageName: '' })}>画像を削除</button>
+            )}
+          </div>
+
+          {/* 画像プレビュー */}
+          {line.textStyleImageBlob && (
+            <div style={{ marginBottom: 8 }}>
+              <label style={{ fontSize: 12, color: 'var(--ink-1)', display: 'block', marginBottom: 4 }}>画像プレビュー（文字に貼られる内容）</label>
+              <img
+                key={line.textStyleImageName}
+                src={URL.createObjectURL(line.textStyleImageBlob)}
+                alt="テクスチャプレビュー"
+                style={{ width: '100%', maxHeight: 100, objectFit: 'contain', background: '#000', borderRadius: 4 }}
+              />
+            </div>
+          )}
+
+          <div style={{ fontSize: 11, color: 'var(--ink-2)', marginTop: 4 }}>
+            ヒント：スケール・オフセットを調整して文字に見せたい部分を合わせてください。動画は上の動画プレビュー、画像は画像プレビューで確認できます。
+          </div>
         </div>
       )}
     </div>

@@ -36,6 +36,8 @@ export class LyricRenderer {
 
     // 行ごとのtextStyle用動画要素キャッシュ。key=lineId, value={videoEl, blobRef}
     this._lineVideoCache = new Map();
+    // 行ごとのtextStyle用画像要素キャッシュ。key=lineId, value={imgEl, blobRef}
+    this._lineImageCache = new Map();
   }
 
   setProject(project) {
@@ -240,19 +242,36 @@ export class LyricRenderer {
         if (line.textStyleVideoBlob) {
           const cached = this._lineVideoCache.get(line.id);
           if (!cached || cached.blobRef !== line.textStyleVideoBlob) {
+            if (cached) { cached.videoEl.pause(); URL.revokeObjectURL(cached.videoEl.src); }
             const url = URL.createObjectURL(line.textStyleVideoBlob);
             const v = document.createElement('video');
             v.src = url; v.muted = true; v.playsInline = true; v.loop = true;
-            if (cached) URL.revokeObjectURL(cached.videoEl.src);
-            this._lineVideoCache.set(line.id, { videoEl: v, blobRef: line.textStyleVideoBlob });
             v.load();
+            v.play().catch(() => {}); // 準備できたら再生開始
+            this._lineVideoCache.set(line.id, { videoEl: v, blobRef: line.textStyleVideoBlob });
           }
           textStyleVideoEl = this._lineVideoCache.get(line.id)?.videoEl || null;
         }
         // textStyleVideoBlob が無い場合は、プロジェクトの背景動画で代用する
         const videoForStyle = textStyleVideoEl || this._bgVideoEl || null;
+
+        // 行ごとのtextStyle用画像（textStyleImageBlob）を取得する
+        let textStyleImageEl = null;
+        if (line.textStyleImageBlob) {
+          const cachedImg = this._lineImageCache.get(line.id);
+          if (!cachedImg || cachedImg.blobRef !== line.textStyleImageBlob) {
+            if (cachedImg) URL.revokeObjectURL(cachedImg.imgEl.src);
+            const url = URL.createObjectURL(line.textStyleImageBlob);
+            const img = new Image();
+            img.src = url;
+            this._lineImageCache.set(line.id, { imgEl: img, blobRef: line.textStyleImageBlob });
+          }
+          textStyleImageEl = this._lineImageCache.get(line.id)?.imgEl || null;
+        }
         try {
-          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, videoForStyle);
+          // 画像があれば画像を、なければ動画を第8引数として渡す（applyToCanvasのシグネチャを統一）
+          const mediaForStyle = textStyleImageEl || videoForStyle || null;
+          textStyle.applyToCanvas(offCtx, canvas.width, canvas.height, t, line.textStyleParams || {}, fontSize, color, mediaForStyle);
         } catch (e) {
           console.error('文字デザイン適用エラー:', line.textStyle, e);
         }
@@ -267,9 +286,9 @@ export class LyricRenderer {
   dispose() {
     if (this._bgImageEl) URL.revokeObjectURL(this._bgImageEl.src);
     if (this._bgVideoEl) URL.revokeObjectURL(this._bgVideoEl.src);
-    for (const { videoEl } of this._lineVideoCache.values()) {
-      URL.revokeObjectURL(videoEl.src);
-    }
+    for (const { videoEl } of this._lineVideoCache.values()) URL.revokeObjectURL(videoEl.src);
+    for (const { imgEl } of this._lineImageCache.values()) URL.revokeObjectURL(imgEl.src);
     this._lineVideoCache.clear();
+    this._lineImageCache.clear();
   }
 }

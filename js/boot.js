@@ -17,6 +17,7 @@ const FILES = [
   'js/effects/rectanglePatrol.js',
   'js/effects/charSliceAssemble.js',
   'js/effects/matrixReveal.js',
+  'js/effects/textOrientation.js',
   'js/effects/index.js',
   'js/effects/textStyleRegistry.js',
   'js/effects/textStyles/gridPattern.js',

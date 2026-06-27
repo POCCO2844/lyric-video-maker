@@ -13,5 +13,6 @@ import './circleRotate.js';
 import './rectanglePatrol.js';
 import './charSliceAssemble.js';
 import './matrixReveal.js';
+import './textOrientation.js';
 
 export { registerEffect, getEffect, listEffects } from './registry.js';
